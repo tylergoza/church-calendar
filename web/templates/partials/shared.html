@@ -1,0 +1,23 @@
+{{/* Form error list. Pass .Errors ([]string). */}}
+{{define "errors"}}
+  {{if .}}
+    <div class="alert alert--error" role="alert">
+      <strong>Please fix the following:</strong>
+      <ul>{{range .}}<li>{{.}}</li>{{end}}</ul>
+    </div>
+  {{end}}
+{{end}}
+
+{{define "csrf"}}<input type="hidden" name="_csrf" value="{{.}}">{{end}}
+
+{{/* Delete button with confirmation. dict "Action" url "CSRF" token "Label" text "Confirm" message */}}
+{{define "delete-button"}}
+  <form method="post" action="{{.Action}}" class="inline-form"
+        data-controller="confirm" data-confirm-message-value="{{.Confirm}}" data-action="submit->confirm#check">
+    {{template "csrf" .CSRF}}
+    <button type="submit" class="btn btn--danger-ghost btn--sm">{{.Label}}</button>
+  </form>
+{{end}}
+
+{{/* Who can see a booking outside the app. Pass "public", "private" or "locked". */}}
+{{define "visibility-badge"}}{{if eq . "public"}}<span class="badge badge--public" title="Shows on the public calendar">Public</span>{{else if eq . "locked"}}<span class="badge badge--locked" title="Only its rooms and times show, even to members">Locked</span>{{else}}<span class="badge badge--locked" title="Outside the app it only shows that its rooms are busy">Private</span>{{end}}{{end}}

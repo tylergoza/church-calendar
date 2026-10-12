@@ -5,7 +5,7 @@ event, rehearsal, meeting and room booking on one calendar, with room
 conflicts caught across all the apps. People (inside or outside the church)
 can also ask for a room here.
 
-Status: planned, nothing built yet (2026-10-11).
+Status: step 1 (skeleton) built (2026-10-11).
 
 ## The idea in one paragraph
 
@@ -303,12 +303,12 @@ after **Test sign-in**):
 Each step is a working app; stop after any of them.
 
 ### 1. Skeleton
-- [ ] `go mod init`, copy layout, CSRF, sessions, local login, `/setup`, rate limiter, PWA bits and the Stimulus autoloader from `../event_planning`
-- [ ] Migration `001_initial.sql` with the tables above
-- [ ] Roles `member`, `scheduler`, `admin`; `requireScheduler` / `requireAdmin`
-- [ ] `Makefile` (`dev`, `test`, `build`), `.gitignore`, `README.md`, `LICENSE`
-- [ ] Connections plumbing copied from the event planner once it's built (`internal/secrets`, the connection type, `/admin/connections`, `calendar connection clear …`); until then, build connections straight into this shape rather than env-only
-- [ ] `go vet ./... && go test ./...` pass
+- [x] `go mod init`, copy layout, CSRF, sessions, local login, `/setup`, rate limiter, PWA bits and the Stimulus autoloader from `../event_planning` (SSO code left out until step 7)
+- [x] Migration `001_initial.sql` with the tables above (plus `requests.code`, `bookings.occurrence_date`/`created_by`, `series`, `series_skips`, `conflict_ok`). Not deployed yet, so 001 can still change until step 8
+- [x] Roles `member`, `scheduler`, `admin`; `requireScheduler` / `requireAdmin`
+- [x] `Makefile` (`dev`, `test`, `build`), `.gitignore`, `README.md`, `LICENSE`
+- [x] Connections plumbing built straight into the shared shape (the event planner hasn't built it yet): `internal/secrets`, `internal/connections` (whole-connection env override), `/admin/connections` with Save / Test / Keep in settings / Disconnect, `church-calendar connection clear tracker|events`. Tracker and Event planner sections; the tracker's Test arrives with its client in step 6, SSO's section in step 7. When the event planner builds its version, compare and move whichever is better to both
+- [x] `go vet ./... && go test ./...` pass
 
 ### 2. Rooms and hand-made bookings
 - [ ] Rooms pages: add, edit, archive, bookable, needs approval
