@@ -173,16 +173,20 @@ func (s *Server) asset(p string) string {
 
 func (s *Server) funcs() template.FuncMap {
 	return template.FuncMap{
-		"asset":     s.asset,
-		"relDays":   s.relDays,
-		"fmtDate":   fmtDate,
-		"fmtTime":   fmtTime,
-		"today":     func() string { return s.today() },
-		"dict":      dict,
-		"roleLabel": store.RoleLabel,
-		"add":       func(a, b int) int { return a + b },
-		"pluralize": pluralize,
-		"lines":     func(t string) []string { return strings.Split(strings.TrimSpace(t), "\n") },
+		"asset":              s.asset,
+		"relDays":            s.relDays,
+		"fmtDate":            fmtDate,
+		"fmtTime":            fmtTime,
+		"today":              func() string { return s.today() },
+		"dict":               dict,
+		"roleLabel":          store.RoleLabel,
+		"pair":               func(a, b store.Booking) []store.Booking { return []store.Booking{a, b} },
+		"canSee":             func(b store.Booking, u *store.User) bool { return canSeeDetails(&b, u) },
+		"source":             sourceLabel,
+		"bookingStatusLabel": store.BookingStatusLabel,
+		"add":                func(a, b int) int { return a + b },
+		"pluralize":          pluralize,
+		"lines":              func(t string) []string { return strings.Split(strings.TrimSpace(t), "\n") },
 	}
 }
 

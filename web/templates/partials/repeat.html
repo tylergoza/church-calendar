@@ -1,0 +1,62 @@
+{{/* The "Repeats" fields of the booking form. Pass a repeatForm. Works without JavaScript (every part shows); repeat_controller.js hides the parts that don't apply. */}}
+{{define "repeat-fields"}}
+<fieldset class="fieldset repeat" data-controller="repeat" data-action="change->repeat#update input->repeat#update">
+  <legend>Repeats</legend>
+  <div class="segmented">
+    {{if not .NoNever}}<label><input type="radio" name="repeat_freq" value="none" {{if eq .Freq "none"}}checked{{end}}> Never</label>{{end}}
+    <label><input type="radio" name="repeat_freq" value="daily" {{if eq .Freq "daily"}}checked{{end}}> Daily</label>
+    <label><input type="radio" name="repeat_freq" value="weekly" {{if eq .Freq "weekly"}}checked{{end}}> Weekly</label>
+    <label><input type="radio" name="repeat_freq" value="monthly" {{if eq .Freq "monthly"}}checked{{end}}> Monthly</label>
+  </div>
+
+  <div class="repeat__row" data-repeat-target="part" data-repeat-for="daily weekly monthly">
+    <label for="repeat_every">Every</label>
+    <input id="repeat_every" name="repeat_every" type="number" min="1" max="999" value="{{.Every}}" class="repeat__num">
+    <span data-repeat-target="part" data-repeat-for="daily">days</span>
+    <span data-repeat-target="part" data-repeat-for="weekly">weeks</span>
+    <span data-repeat-target="part" data-repeat-for="monthly">months</span>
+  </div>
+
+  <div class="repeat__days" data-repeat-target="part" data-repeat-for="weekly">
+    <span class="label">On</span>
+    {{range .Days}}<label class="check"><input type="checkbox" name="repeat_weekday" value="{{.Value}}" {{if .Checked}}checked{{end}}> {{.Short}}</label>{{end}}
+  </div>
+
+  <div class="repeat__month" data-repeat-target="part" data-repeat-for="monthly">
+    <div class="repeat__row">
+      <label class="check"><input type="radio" name="repeat_month_mode" value="day" {{if ne .MonthMode "weekday"}}checked{{end}}> On day</label>
+      <label class="sr-only" for="repeat_month_day">Day of the month</label>
+      <input id="repeat_month_day" name="repeat_month_day" type="number" min="1" max="31" value="{{.MonthDay}}" class="repeat__num">
+    </div>
+    <div class="repeat__row">
+      <label class="check"><input type="radio" name="repeat_month_mode" value="weekday" {{if eq .MonthMode "weekday"}}checked{{end}}> On the</label>
+      <label class="sr-only" for="repeat_month_week">Which week</label>
+      <select id="repeat_month_week" name="repeat_month_week" class="repeat__select">
+        {{range .Weeks}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+      <label class="sr-only" for="repeat_month_weekday">Day of the week</label>
+      <select id="repeat_month_weekday" name="repeat_month_weekday" class="repeat__select">
+        {{range .Days}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </div>
+  </div>
+
+  <div class="repeat__ends" data-repeat-target="part" data-repeat-for="daily weekly monthly">
+    <span class="label">Ends</span>
+    <label class="check"><input type="radio" name="repeat_end" value="never" {{if eq .End "never"}}checked{{end}}> Never</label>
+    <div class="repeat__row">
+      <label class="check"><input type="radio" name="repeat_end" value="on" {{if eq .End "on"}}checked{{end}}> On</label>
+      <label class="sr-only" for="repeat_until">Last date</label>
+      <input id="repeat_until" name="repeat_until" type="date" value="{{.Until}}" class="repeat__date">
+    </div>
+    <div class="repeat__row">
+      <label class="check"><input type="radio" name="repeat_end" value="after" {{if eq .End "after"}}checked{{end}}> After</label>
+      <label class="sr-only" for="repeat_count">Number of times</label>
+      <input id="repeat_count" name="repeat_count" type="number" min="1" max="1000" value="{{.Count}}" class="repeat__num">
+      <span>times</span>
+    </div>
+  </div>
+
+  <p class="hint repeat__summary" data-repeat-target="summary" aria-live="polite"></p>
+</fieldset>
+{{end}}

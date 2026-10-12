@@ -42,9 +42,27 @@ func (s *Server) routes() http.Handler {
 	// The calendar is public: no requireUser. Signed-in people get the same
 	// pages with more detail (the session is loaded for these paths).
 	mux.HandleFunc("GET /{$}", s.handleHome)
+	mux.HandleFunc("GET /calendar/{id}", s.handleBookingShow)
 
 	auth("GET /account", s.handleAccount)
 	auth("POST /account/password", s.handleAccountPassword)
+	auth("GET /rooms", s.handleRooms)
+	auth("GET /rooms/{id}", s.handleRoomShow)
+
+	// Schedulers
+	sched := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.requireScheduler(h)) }
+	sched("GET /rooms/new", s.handleRoomNew)
+	sched("POST /rooms", s.handleRoomCreate)
+	sched("GET /rooms/{id}/edit", s.handleRoomEdit)
+	sched("POST /rooms/{id}", s.handleRoomUpdate)
+	sched("GET /bookings/new", s.handleBookingNew)
+	sched("POST /bookings", s.handleBookingCreate)
+	sched("GET /bookings/{id}/edit", s.handleBookingEdit)
+	sched("POST /bookings/{id}", s.handleBookingUpdate)
+	sched("POST /bookings/{id}/delete", s.handleBookingDelete)
+	sched("POST /bookings/{id}/end-series", s.handleBookingEndSeries)
+	sched("GET /conflicts", s.handleConflicts)
+	sched("POST /conflicts/ok", s.handleConflictOK)
 
 	// Admins
 	admin := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.requireAdmin(h)) }

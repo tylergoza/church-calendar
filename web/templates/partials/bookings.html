@@ -1,0 +1,16 @@
+{{/* One booking in a list, with the visibility rules: people who can't see
+     it in full get only its rooms and times. dict "B" booking "User" user */}}
+{{define "booking-item"}}
+  {{if canSee .B .User}}
+    <div class="cal-item">
+      <span class="cal-item__when">{{.B.ShortWhen}}</span>
+      <a class="cal-item__title" href="/calendar/{{.B.ID}}">{{.B.Title}}</a>
+      {{if .B.Kind}}<span class="cal-item__kind muted">{{.B.Kind}}</span>{{end}}
+      {{with .B.RoomNames}}<span class="muted">{{.}}</span>{{end}}
+      {{if eq .B.Status "tentative"}}<span class="badge badge--warn">Tentative</span>{{end}}
+      {{if eq .B.Status "cancelled"}}<span class="badge badge--alert">Cancelled</span>{{end}}
+    </div>
+  {{else}}
+    <p class="cal-item cal-item--busy">{{with .B.RoomNames}}{{.}} unavailable{{else}}Busy{{end}} · {{.B.ShortWhen}}</p>
+  {{end}}
+{{end}}

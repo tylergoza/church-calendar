@@ -1,0 +1,92 @@
+{{define "content"}}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Calendar</a>{{if .Form.ID}} › <a href="/calendar/{{.Form.ID}}">{{.Form.Title}}</a>{{end}}</nav>
+<div class="page-head"><div><h1>{{.Title}}</h1></div></div>
+<div class="card narrow">
+  {{template "errors" .Errors}}
+  <form method="post" action="{{if .Form.ID}}/bookings/{{.Form.ID}}{{else}}/bookings{{end}}" class="form">
+    {{template "csrf" .CSRF}}
+    <div class="field">
+      <label for="title">Title</label>
+      <input id="title" name="title" value="{{.Form.Title}}" required maxlength="200" {{if not .Form.ID}}autofocus{{end}}>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="kind">Kind <span class="optional">optional</span></label>
+        <input id="kind" name="kind" value="{{.Form.Kind}}" placeholder="e.g. Meeting" list="booking-kinds">
+        <datalist id="booking-kinds">
+          <option value="Meeting"><option value="Rehearsal"><option value="Class"><option value="Service">
+          <option value="Fellowship"><option value="Private event">
+        </datalist>
+      </div>
+      <div class="field">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+          {{range .Statuses}}<option value="{{.}}" {{if eq . $.Form.Status}}selected{{end}}>{{bookingStatusLabel .}}</option>{{end}}
+        </select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="starts_on">Starts</label><input id="starts_on" name="starts_on" type="date" value="{{.Form.StartsOn}}" required></div>
+      <div class="field"><label for="start_time">At <span class="optional">blank for all day</span></label><input id="start_time" name="start_time" type="time" value="{{.Form.StartTime}}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="ends_on">Ends <span class="optional">if on a later day</span></label><input id="ends_on" name="ends_on" type="date" value="{{.Form.EndsOn}}"></div>
+      <div class="field"><label for="end_time">At <span class="optional">optional</span></label><input id="end_time" name="end_time" type="time" value="{{.Form.EndTime}}"></div>
+    </div>
+    <p class="hint">With a start time but no end time, the rooms count as busy for the rest of the day.</p>
+    <fieldset class="fieldset">
+      <legend>Rooms</legend>
+      {{if .Rooms}}
+      <div class="member-list">
+        {{range .Rooms}}<label class="check"><input type="checkbox" name="room" value="{{.ID}}" {{if index $.Picked .ID}}checked{{end}}> {{.Name}}{{if .Archived}} <span class="muted small">(archived)</span>{{end}}</label>{{end}}
+      </div>
+      {{else}}
+      <p class="hint">No rooms yet. {{if .User.CanSchedule}}<a href="/rooms/new">Add a room</a> first, or save this without one.{{end}}</p>
+      {{end}}
+    </fieldset>
+    {{if .Form.SeriesID}}
+    <fieldset class="fieldset">
+      <legend>Apply changes to</legend>
+      <div class="segmented">
+        <label><input type="radio" name="apply" value="this" required {{if ne .Apply "later"}}checked{{end}}> Just this date</label>
+        <label><input type="radio" name="apply" value="later" required {{if eq .Apply "later"}}checked{{end}}> This and later dates</label>
+      </div>
+      <p class="hint">{{.Repeats}}. "This and later" copies what you changed (title, kind, times, rooms, visibility, description) to the dates after this one. The day itself and the status stay per date.</p>
+    </fieldset>
+    {{else}}
+    {{template "repeat-fields" .Repeat}}
+    {{end}}
+    <fieldset class="fieldset">
+      <legend>Who can see the details</legend>
+      <div class="segmented">
+        <label><input type="radio" name="visibility" value="private" {{if ne .Form.Visibility "public"}}checked{{end}}> Private</label>
+        <label><input type="radio" name="visibility" value="public" {{if eq .Form.Visibility "public"}}checked{{end}}> Public</label>
+      </div>
+      <p class="hint">Private: people signed in see it; everyone else only sees that its rooms are busy. Public: shows in full on the public calendar.</p>
+    </fieldset>
+    <div class="field">
+      <label for="description">Public description <span class="optional">optional</span></label>
+      <textarea id="description" name="description" rows="3">{{.Form.Description}}</textarea>
+      <p class="hint">Shown with the booking wherever its details show.</p>
+    </div>
+    <div class="form__actions">
+      <button type="submit" class="btn btn--primary">{{if .Form.ID}}Save{{else}}Add booking{{end}}</button>
+      <a class="btn btn--ghost" href="{{if .Form.ID}}/calendar/{{.Form.ID}}{{else}}/{{end}}">Cancel</a>
+    </div>
+  </form>
+</div>
+{{if .Form.ID}}
+<div class="card narrow danger-zone">
+  {{if .Form.SeriesID}}
+  <h2 class="section__title">Remove dates</h2>
+  <p class="muted small">Remove just {{fmtDate .Form.OccurrenceDate}}: the other dates stay booked and the repeat won't bring this one back. Or stop repeating here: this date and every later one are removed.</p>
+  {{template "delete-button" (dict "Action" (printf "/bookings/%d/delete" .Form.ID) "CSRF" .CSRF "Label" "Remove this date" "Confirm" (printf "Remove only %s? The other dates stay booked." (fmtDate .Form.OccurrenceDate)))}}
+  {{template "delete-button" (dict "Action" (printf "/bookings/%d/end-series" .Form.ID) "CSRF" .CSRF "Label" "Remove this and later dates" "Confirm" (printf "Stop repeating from %s and remove that date and every later one?" (fmtDate .Form.OccurrenceDate)))}}
+  {{else}}
+  <h2 class="section__title">Delete this booking</h2>
+  <p class="muted small">Frees its rooms. To keep it on record instead, set its status to Cancelled.</p>
+  {{template "delete-button" (dict "Action" (printf "/bookings/%d/delete" .Form.ID) "CSRF" .CSRF "Label" "Delete booking" "Confirm" (printf "Delete %s? This can't be undone." .Form.Title))}}
+  {{end}}
+</div>
+{{end}}
+{{end}}

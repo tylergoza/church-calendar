@@ -1,0 +1,43 @@
+{{define "content"}}
+<div class="page-head">
+  <div><h1>Conflicts</h1><p class="muted">Bookings that use the same room at the same time, from today on. Cancelled bookings and rooms the calendar doesn't know aren't checked. Mark a clash "That's fine" when it's known and agreed, and it stops showing.</p></div>
+</div>
+{{range .Groups}}
+<section class="section">
+  <h2 class="section__title">{{.Room}} <span class="count">{{len .Items}}</span></h2>
+  <div class="table-wrap">
+    <table class="table table--stack">
+      <thead><tr><th>Booking</th><th>Clashes with</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+        {{range .Items}}
+        <tr>
+          {{range $x := (pair .A .B)}}
+          <td>
+            {{if canSee $x $.User}}<a href="/calendar/{{$x.ID}}"><strong>{{$x.Title}}</strong></a>{{else}}<strong>Busy</strong>{{end}}
+            {{if eq $x.Status "tentative"}}<span class="badge badge--warn">Tentative</span>{{end}}
+            <br><span class="muted small">{{$x.When}} · {{source $x.Source}}</span>
+          </td>
+          {{end}}
+          <td class="actions">
+            <form method="post" action="/conflicts/ok" class="inline-form">
+              {{template "csrf" $.CSRF}}
+              <input type="hidden" name="a" value="{{.A.ID}}"><input type="hidden" name="b" value="{{.B.ID}}">
+              <input type="hidden" name="next" value="/conflicts{{if $.All}}?all=1{{end}}">
+              {{if .OK}}<span class="muted small">Marked fine</span> <button type="submit" class="btn btn--ghost btn--sm">Undo</button>
+              {{else}}<input type="hidden" name="ok" value="1"><button type="submit" class="btn btn--ghost btn--sm">That's fine</button>{{end}}
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{else}}
+<div class="empty">
+  <h2>No conflicts</h2>
+  <p>No two bookings use the same room at the same time{{if not .All}}, apart from any marked fine{{end}}.</p>
+</div>
+{{end}}
+<p class="muted small">{{if .All}}<a href="/conflicts">Hide the ones marked fine</a>{{else}}<a href="/conflicts?all=1">Show the ones marked fine too</a>{{end}}</p>
+{{end}}

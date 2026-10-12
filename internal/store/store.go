@@ -218,6 +218,8 @@ func nullInt(i int64) any {
 	return i
 }
 
+func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
 func notFound(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound

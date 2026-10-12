@@ -1,0 +1,41 @@
+{{define "content"}}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/rooms">Rooms</a>{{if .Form.ID}} › <a href="/rooms/{{.Form.ID}}">{{.Form.Name}}</a>{{end}}</nav>
+<div class="page-head"><div><h1>{{.Title}}</h1></div></div>
+<div class="card narrow">
+  {{template "errors" .Errors}}
+  <form method="post" action="{{if .Form.ID}}/rooms/{{.Form.ID}}{{else}}/rooms{{end}}" class="form">
+    {{template "csrf" .CSRF}}
+    <div class="field">
+      <label for="name">Name</label>
+      <input id="name" name="name" value="{{.Form.Name}}" required maxlength="100" {{if not .Form.ID}}autofocus{{end}}>
+      {{if .Form.FromTracker}}<p class="hint">Imported from the maintenance tracker ({{.Form.TrackerPath}}). Importing again updates the name.</p>{{end}}
+    </div>
+    <div class="field field--narrow">
+      <label for="capacity">Capacity <span class="optional">optional</span></label>
+      <input id="capacity" name="capacity" type="number" min="0" value="{{if .Form.Capacity}}{{.Form.Capacity}}{{end}}">
+    </div>
+    <fieldset class="fieldset">
+      <legend>Room requests</legend>
+      <label class="check"><input type="checkbox" name="bookable" value="1" {{if .Form.Bookable}}checked{{end}}> Offer it on the request form</label>
+      <label class="check"><input type="checkbox" name="needs_approval" value="1" {{if .Form.NeedsApproval}}checked{{end}}> Requests wait for a scheduler to approve them</label>
+      <p class="hint">Without approval, members who ask for it get it straight away when it's free.</p>
+    </fieldset>
+    <div class="field">
+      <label for="notes">Notes <span class="optional">optional</span></label>
+      <textarea id="notes" name="notes" rows="3">{{.Form.Notes}}</textarea>
+      <p class="hint">Shown to people signed in: where the key is, what's set up there.</p>
+    </div>
+    {{if .Form.ID}}
+    <fieldset class="fieldset">
+      <legend>Archive</legend>
+      <label class="check"><input type="checkbox" name="archived" value="1" {{if .Form.Archived}}checked{{end}}> Archived</label>
+      <p class="hint">An archived room stays on the bookings that use it but can't be picked for new ones.</p>
+    </fieldset>
+    {{end}}
+    <div class="form__actions">
+      <button type="submit" class="btn btn--primary">{{if .Form.ID}}Save{{else}}Add room{{end}}</button>
+      <a class="btn btn--ghost" href="{{if .Form.ID}}/rooms/{{.Form.ID}}{{else}}/rooms{{end}}">Cancel</a>
+    </div>
+  </form>
+</div>
+{{end}}
