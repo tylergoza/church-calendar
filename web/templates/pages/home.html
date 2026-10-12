@@ -1,0 +1,13 @@
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>{{.SiteName}}</h1>
+    <p class="muted">What's happening where and when.</p>
+  </div>
+</div>
+<div class="empty">
+  <h2>The calendar is on its way</h2>
+  <p>Rooms, bookings and the public calendar come next.</p>
+  {{if .User}}{{if .User.IsAdmin}}<p><a class="btn" href="/admin/connections">Connections</a> <a class="btn" href="/admin/users">Users</a></p>{{end}}{{end}}
+</div>
+{{end}}

@@ -1,0 +1,73 @@
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>Connections</h1>
+    <p class="muted">Links to the church's other apps. Each one is optional: when it's off, the calendar works on its own. A connection set on the server (environment variables) wins over what's saved here.</p>
+  </div>
+</div>
+
+{{range .Connections}}
+{{$c := .}}
+<section class="card narrow" id="{{.Def.ID}}">
+  <h2>{{.Def.Name}}
+    {{if eq .Source.String "Set here"}}<span class="badge badge--public">Set here</span>
+    {{else if .FromEnv}}<span class="badge badge--warn">Set on the server</span>
+    {{else}}<span class="badge badge--locked">Not connected</span>{{end}}
+  </h2>
+  <p class="hint">{{.Def.Help}}</p>
+  {{with .ChangedBy}}<p class="small muted">Last changed by {{.}} · {{fmtTime $c.ChangedAt}}</p>{{end}}
+  {{if eq $.ErrFor .Def.ID}}{{template "errors" $.Errors}}{{end}}
+
+  {{if .FromEnv}}
+    {{if not .On}}<div class="alert alert--error" role="alert">Some of its variables are set on the server but not all, so it's off. Set the rest on the server, or remove them all there to manage it here.</div>{{end}}
+    <dl class="details">
+      {{range .Fields}}
+        <div><dt>{{.Label}} <span class="muted small">({{.Env}})</span></dt>
+          <dd>{{if .Secret}}{{if .Set}}Set{{with .Ends}}, ends …{{.}}{{end}}{{else}}<span class="muted">Not set</span>{{end}}{{else}}{{if .Value}}{{.Value}}{{else}}<span class="muted">Not set</span>{{end}}{{end}}</dd></div>
+      {{end}}
+    </dl>
+    {{if .SettingsMatch}}
+      <p class="small">The settings here match, so it's safe to remove these variables from the server. Nothing will disconnect.</p>
+    {{else}}
+      {{if .SettingsDiffer}}<div class="alert alert--error" role="alert">Different values are saved here. The server's win while they're set.</div>{{end}}
+      <form method="post" action="/admin/connections/{{.Def.ID}}/keep" class="inline-form">
+        {{template "csrf" $.CSRF}}
+        <button type="submit" class="btn btn--sm">Keep in settings</button>
+      </form>
+      <p class="hint">Copies the server's values here, so you can then remove them from the server and manage this connection on this page.</p>
+    {{end}}
+  {{else}}
+    <form method="post" action="/admin/connections/{{.Def.ID}}" class="form">
+      {{template "csrf" $.CSRF}}
+      {{range .Fields}}
+        <div class="field">
+          <label for="{{.Key}}">{{.Label}}</label>
+          {{if .Secret}}
+            <input id="{{.Key}}" name="{{.Key}}" type="password" autocomplete="off"
+                   placeholder="{{if .Set}}Saved{{with .Ends}}, ends …{{.}}{{end}}; paste a new one to replace it{{else}}{{.Hint}}{{end}}">
+            {{if .Unreadable}}<p class="hint text-alert">Can't read the saved token (the database came from another server without its secrets.key). Enter it again.</p>{{end}}
+            {{if .Set}}<label class="check small"><input type="checkbox" name="remove_{{.Key}}" value="1"> Remove the saved {{.Label}}</label>{{end}}
+          {{else}}
+            <input id="{{.Key}}" name="{{.Key}}" value="{{.Value}}" {{if .URL}}inputmode="url"{{end}} autocomplete="off" placeholder="{{.Hint}}">
+          {{end}}
+        </div>
+      {{end}}
+      <div class="form__actions">
+        <button type="submit" class="btn btn--primary">Save</button>
+      </div>
+      <p class="hint">Saving {{if .CanTest}}checks the connection, and {{end}}keeps what you typed even if the other app isn't running yet.</p>
+    </form>
+    {{if .Saved}}
+      {{template "delete-button" (dict "Action" (printf "/admin/connections/%s/clear" .Def.ID) "CSRF" $.CSRF "Label" "Disconnect" "Confirm" (printf "Remove the saved %s settings?" .Def.Name))}}
+    {{end}}
+  {{end}}
+
+  {{if and .On .CanTest}}
+    <form method="post" action="/admin/connections/{{.Def.ID}}/test" class="inline-form">
+      {{template "csrf" $.CSRF}}
+      <button type="submit" class="btn btn--ghost btn--sm">Test</button>
+    </form>
+  {{end}}
+</section>
+{{end}}
+{{end}}

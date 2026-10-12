@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0f766e"/>
+  <!-- page -->
+  <rect x="96" y="124" width="320" height="300" rx="28" fill="#fff"/>
+  <!-- header -->
+  <path d="M124 124 H388 A28 28 0 0 1 416 152 V208 H96 V152 A28 28 0 0 1 124 124 Z" fill="#e5533d"/>
+  <!-- rings -->
+  <rect x="164" y="92" width="28" height="72" rx="14" fill="#fff"/>
+  <rect x="320" y="92" width="28" height="72" rx="14" fill="#fff"/>
+  <!-- days -->
+  <g fill="#cfe3e0">
+    <rect x="124" y="232" width="48" height="44" rx="8"/><rect x="196" y="232" width="48" height="44" rx="8"/><rect x="268" y="232" width="48" height="44" rx="8"/><rect x="340" y="232" width="48" height="44" rx="8"/>
+    <rect x="124" y="292" width="48" height="44" rx="8"/><rect x="196" y="292" width="48" height="44" rx="8"/><rect x="340" y="292" width="48" height="44" rx="8"/>
+    <rect x="124" y="352" width="48" height="44" rx="8"/><rect x="196" y="352" width="48" height="44" rx="8"/><rect x="268" y="352" width="48" height="44" rx="8"/>
+  </g>
+  <!-- the event -->
+  <rect x="268" y="292" width="48" height="44" rx="8" fill="#f4c34d"/>
+</svg>
