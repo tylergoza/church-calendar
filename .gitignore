@@ -1,0 +1,9 @@
+bin/
+data/
+*.db
+*.db-shm
+*.db-wal
+deploy/ansible/vars.yml
+secrets.key
+.claude/settings.local.json
+.claude/worktrees/
