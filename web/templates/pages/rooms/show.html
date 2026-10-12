@@ -1,0 +1,35 @@
+{{define "content"}}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/rooms">Rooms</a></nav>
+<div class="page-head">
+  <div>
+    <h1>{{.Room.Name}}{{if .Room.Archived}} <span class="badge badge--locked">Archived</span>{{end}}</h1>
+    {{with .Room.TrackerPath}}<p class="muted">{{.}}</p>{{end}}
+  </div>
+  {{if .User.CanSchedule}}
+  <div class="page-head__actions">
+    {{if not .Room.Archived}}<a class="btn btn--primary" href="/bookings/new?room={{.Room.ID}}">Book this room</a>{{end}}
+    <a class="btn btn--ghost" href="/rooms/{{.Room.ID}}/edit">Edit</a>
+  </div>
+  {{end}}
+</div>
+<div class="card">
+  <dl class="details">
+    <div><dt>Capacity</dt><dd>{{if .Room.Capacity}}{{.Room.Capacity}}{{else}}<span class="muted">Not set</span>{{end}}</dd></div>
+    <div><dt>Requests</dt><dd>{{if not .Room.Bookable}}Not offered on the request form{{else if .Room.NeedsApproval}}Wait for a scheduler{{else}}Book straight away{{end}}</dd></div>
+  </dl>
+  {{with .Room.Notes}}<p>{{range lines .}}{{.}}<br>{{end}}</p>{{end}}
+</div>
+<section class="section">
+  <h2 class="section__title">Next {{.Weeks}} weeks</h2>
+  <div class="cal-agenda">
+    {{range .Bookings}}
+      <section class="cal-agenda__day">
+        <h3>{{fmtDate .StartsOn}}</h3>
+        {{template "booking-item" (dict "B" . "User" $.User)}}
+      </section>
+    {{else}}
+      <p class="muted">Nothing booked in {{.Room.Name}} for the next {{.Weeks}} weeks.</p>
+    {{end}}
+  </div>
+</section>
+{{end}}

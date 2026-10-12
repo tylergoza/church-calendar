@@ -1,0 +1,31 @@
+{{define "content"}}
+<div class="page-head">
+  <div><h1>Rooms</h1><p class="muted">The rooms and spaces that can be booked. Bookings in the same room at the same time show on Conflicts.</p></div>
+  {{if .User.CanSchedule}}<div class="page-head__actions"><a class="btn btn--primary" href="/rooms/new">Add room</a></div>{{end}}
+</div>
+{{if .Rooms}}
+<div class="table-wrap">
+  <table class="table table--stack">
+    <thead><tr><th>Room</th><th class="num">Capacity</th><th>Requests</th>{{if .User.CanSchedule}}<th><span class="sr-only">Actions</span></th>{{end}}</tr></thead>
+    <tbody>
+      {{range .Rooms}}
+        <tr>
+          <td data-label="Room"><a href="/rooms/{{.ID}}"><strong>{{.Name}}</strong></a>{{if .Archived}} <span class="badge badge--locked">Archived</span>{{end}}{{with .TrackerPath}}<br><span class="muted small">{{.}}</span>{{end}}</td>
+          <td data-label="Capacity" class="num">{{if .Capacity}}{{.Capacity}}{{end}}</td>
+          <td data-label="Requests">{{if not .Bookable}}<span class="muted">Not offered</span>{{else if .NeedsApproval}}Need approval{{else}}Book straight away{{end}}</td>
+          {{if $.User.CanSchedule}}<td class="actions"><a class="btn btn--ghost btn--sm" href="/rooms/{{.ID}}/edit">Edit</a></td>{{end}}
+        </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="empty">
+  <h2>No rooms yet</h2>
+  <p>{{if .User.CanSchedule}}Add the rooms and spaces people book.{{else}}A scheduler hasn't added any rooms yet.{{end}}</p>
+</div>
+{{end}}
+{{if .User.CanSchedule}}
+<p class="muted small">{{if .ShowArchived}}<a href="/rooms">Hide archived rooms</a>{{else}}<a href="/rooms?archived=1">Show archived rooms</a>{{end}}</p>
+{{end}}
+{{end}}

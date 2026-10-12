@@ -1,0 +1,48 @@
+{{define "content"}}
+{{$b := .Booking}}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Calendar</a></nav>
+<div class="page-head">
+  <div>
+    {{if .CanSee}}
+      <h1>{{$b.Title}} {{if .User}}{{template "visibility-badge" $b.Visibility}}{{end}}
+        {{if eq $b.Status "tentative"}}<span class="badge badge--warn">Tentative</span>{{end}}
+        {{if eq $b.Status "cancelled"}}<span class="badge badge--alert">Cancelled</span>{{end}}</h1>
+      {{with $b.Kind}}<p class="muted">{{.}}</p>{{end}}
+    {{else}}
+      <h1>{{with $b.RoomNames}}{{.}} unavailable{{else}}Busy{{end}}</h1>
+    {{end}}
+  </div>
+  {{if and .User.CanSchedule $b.HandMade}}<div class="page-head__actions"><a class="btn btn--ghost" href="/bookings/{{$b.ID}}/edit">Edit</a></div>{{end}}
+</div>
+<div class="card">
+  <dl class="details">
+    <div><dt>When</dt><dd>{{$b.When}}</dd></div>
+    <div><dt>Rooms</dt><dd>{{range $i, $r := $b.Rooms}}{{if $i}}, {{end}}{{if and $.User $r.RoomID}}<a href="/rooms/{{$r.RoomID}}">{{$r.Name}}</a>{{else}}{{$r.Name}}{{end}}{{else}}<span class="muted">None</span>{{end}}</dd></div>
+    {{if .CanSee}}{{with .Repeats}}<div><dt>Repeats</dt><dd>{{.}}</dd></div>{{end}}{{end}}
+    {{if .User}}<div><dt>From</dt><dd>{{if and $b.URL .CanSee}}<a href="{{$b.URL}}">{{.Source}}</a>{{else}}{{.Source}}{{end}}</dd></div>{{end}}
+  </dl>
+  {{if .CanSee}}{{with $b.Description}}<p>{{range lines .}}{{.}}<br>{{end}}</p>{{end}}{{end}}
+  {{if and .User (not $b.HandMade)}}<p class="hint">This booking comes from the {{.Source}}, so it's changed there.</p>{{end}}
+</div>
+{{if .Conflicts}}
+<div class="card card--alert">
+  <h2 class="section__title">Clashes</h2>
+  <p class="muted small">These bookings use the same room at the same time.</p>
+  <ul class="pick-list">
+    {{range .Conflicts}}
+      {{$other := .B}}{{if ne .A.ID $b.ID}}{{$other = .A}}{{end}}
+      <li>
+        <span><strong>{{.Room.Name}}:</strong>
+          {{if canSee $other $.User}}<a href="/calendar/{{$other.ID}}">{{$other.Title}}</a>{{else}}Busy{{end}} · {{$other.When}}</span>
+        <form method="post" action="/conflicts/ok" class="inline-form">
+          {{template "csrf" $.CSRF}}
+          <input type="hidden" name="a" value="{{.A.ID}}"><input type="hidden" name="b" value="{{.B.ID}}">
+          <input type="hidden" name="ok" value="1"><input type="hidden" name="next" value="/calendar/{{$b.ID}}">
+          <button type="submit" class="btn btn--ghost btn--sm">That's fine</button>
+        </form>
+      </li>
+    {{end}}
+  </ul>
+</div>
+{{end}}
+{{end}}

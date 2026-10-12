@@ -2,12 +2,21 @@
 <div class="page-head">
   <div>
     <h1>{{.SiteName}}</h1>
-    <p class="muted">What's happening where and when.</p>
+    <p class="muted">What's happening where and when, for the next {{.Weeks}} weeks.</p>
   </div>
+  {{if .User}}{{if .User.CanSchedule}}<div class="page-head__actions"><a class="btn btn--primary" href="/bookings/new">Add booking</a></div>{{end}}{{end}}
 </div>
-<div class="empty">
-  <h2>The calendar is on its way</h2>
-  <p>Rooms, bookings and the public calendar come next.</p>
-  {{if .User}}{{if .User.IsAdmin}}<p><a class="btn" href="/admin/connections">Connections</a> <a class="btn" href="/admin/users">Users</a></p>{{end}}{{end}}
+<div class="cal-agenda">
+  {{range .Days}}
+    <section class="cal-agenda__day">
+      <h2>{{fmtDate .Date}}{{if .Today}} <span class="badge">Today</span>{{end}}</h2>
+      {{range .Bookings}}{{template "booking-item" (dict "B" . "User" $.User)}}{{end}}
+    </section>
+  {{else}}
+    <div class="empty">
+      <h2>Nothing booked yet</h2>
+      <p>Nothing is on the calendar for the next {{.Weeks}} weeks.</p>
+    </div>
+  {{end}}
 </div>
 {{end}}

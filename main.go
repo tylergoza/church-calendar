@@ -105,6 +105,21 @@ func main() {
 		}
 	}()
 
+	// Keep repeating bookings made six months ahead: once now, then every
+	// few hours.
+	go func() {
+		t := time.NewTicker(6 * time.Hour)
+		defer t.Stop()
+		for {
+			srv.TopUpSeries()
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
+	}()
+
 	go func() {
 		logger.Info("listening", "addr", *addr, "db", *dbPath, "dev", *dev, "tz", time.Local.String())
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

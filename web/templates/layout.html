@@ -37,6 +37,10 @@
       <nav id="main-nav" class="nav" data-nav-target="menu" aria-label="Main">
         {{if .User}}
           <a href="/" {{if eq .Path "/"}}aria-current="page"{{end}}>Calendar</a>
+          <a href="/rooms" {{if eq .Path "/rooms"}}aria-current="page"{{end}}>Rooms</a>
+          {{if .User.CanSchedule}}
+            <a href="/conflicts" {{if eq .Path "/conflicts"}}aria-current="page"{{end}}>Conflicts</a>
+          {{end}}
           {{if .User.IsAdmin}}
             <a href="/admin/users" {{if eq .Path "/admin/users"}}aria-current="page"{{end}}>Users</a>
             <a href="/admin/connections" {{if eq .Path "/admin/connections"}}aria-current="page"{{end}}>Connections</a>

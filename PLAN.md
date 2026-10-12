@@ -5,7 +5,7 @@ event, rehearsal, meeting and room booking on one calendar, with room
 conflicts caught across all the apps. People (inside or outside the church)
 can also ask for a room here.
 
-Status: step 1 (skeleton) built (2026-10-11).
+Status: step 2 (rooms and hand-made bookings) built (2026-10-12).
 
 ## The idea in one paragraph
 
@@ -311,11 +311,11 @@ Each step is a working app; stop after any of them.
 - [x] `go vet ./... && go test ./...` pass
 
 ### 2. Rooms and hand-made bookings
-- [ ] Rooms pages: add, edit, archive, bookable, needs approval
-- [ ] Bookings: one-off and all-day, multi-day, rooms, visibility
-- [ ] Simple repeats (copy `internal/recur` from the event planner), each date a real booking, edit this one / this and later
-- [ ] Conflict query and `/conflicts`, "That's fine"
-- [ ] Tests: overlap rules (all-day vs timed, multi-day, cancelled ignored, unknown rooms ignored)
+- [x] Rooms pages: add, edit, archive, bookable, needs approval (signed-in only for now; the week view of a room comes with the calendar views in step 3, until then `/rooms/{id}` lists the next 8 weeks)
+- [x] Bookings: one-off and all-day, multi-day, rooms, visibility. Hand-made ones are public or private (locked is for apps that send no details). A start time with no end time counts as busy to the end of that day. A plain `/calendar/{id}` page and a 4-week list on `/` stand in until step 3
+- [x] Simple repeats (copy `internal/recur` from the event planner), each date a real booking, edit this one / this and later, remove one date, remove this and later. Left out for now: restoring a removed date and changing the pattern part-way (end it and make a new one)
+- [x] Conflict query and `/conflicts`, "That's fine" (with Undo, and `?all=1` to see marked ones)
+- [x] Tests: overlap rules (all-day vs timed, multi-day, cancelled ignored, unknown rooms ignored)
 
 ### 3. Public calendar and feeds
 - [ ] Move the event planner's calendar templates, CSS and controllers here (month grid + agenda), add the source filter
