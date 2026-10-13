@@ -146,6 +146,37 @@ func (p Place) Label() string {
 	return p.Number + " – " + p.Name
 }
 
+// Product is something the church has, counted or not. Booking says how
+// the calendar offers it with a room booking: "count" (asked how many, up
+// to Total), "service" (yes or no) or "" (not offered). OfferedIn is the
+// places it's offered with.
+type Product struct {
+	ID        int64   `json:"id"`
+	Name      string  `json:"name"`
+	Booking   string  `json:"booking"`
+	Total     int     `json:"total"`
+	Notes     string  `json:"notes"`
+	OfferedIn []int64 `json:"offered_in"`
+}
+
+// Item is some of a product in one place. Quantity is how many (1 for
+// a product that isn't counted).
+type Item struct {
+	ID       int64    `json:"id"`
+	Quantity int      `json:"quantity"`
+	Place    PlaceRef `json:"place"`
+}
+
+// PlaceRef is a place as other things point at it.
+type PlaceRef struct {
+	ID   int64  `json:"id"`
+	Path string `json:"path"`
+}
+
+// ErrTooOld means the tracker doesn't know about bookable equipment yet
+// (it sent products with no "booking" field), so there's nothing to sync.
+var ErrTooOld = errors.New("the maintenance tracker is too old to offer equipment; it needs updating")
+
 // Calls ----------------------------------------------------------------------------
 
 // Places is every place, in tree order (parents before children).
@@ -155,6 +186,54 @@ func (c *Client) Places(ctx context.Context) ([]Place, error) {
 	}
 	err := c.get(ctx, "/places", nil, &out)
 	return out.Places, err
+}
+
+// Products is the products the tracker offers with room bookings (asked
+// with booking=1; an empty list means none). A tracker that doesn't send
+// "booking" at all is too old and gets ErrTooOld, as does one that doesn't
+// know the question (not found), so a sync never takes that for "none".
+func (c *Client) Products(ctx context.Context, booking bool) ([]Product, error) {
+	var q url.Values
+	if booking {
+		q = url.Values{"booking": {"1"}}
+	}
+	var raw struct {
+		Products []struct {
+			Product
+			Booking *string `json:"booking"`
+		} `json:"products"`
+	}
+	if err := c.get(ctx, "/products", q, &raw); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrTooOld
+		}
+		return nil, err
+	}
+	out := make([]Product, 0, len(raw.Products))
+	known := false
+	for _, p := range raw.Products {
+		if p.Booking != nil {
+			known = true
+			p.Product.Booking = *p.Booking
+		}
+		if booking && p.Product.Booking == "" {
+			continue
+		}
+		out = append(out, p.Product)
+	}
+	if len(raw.Products) > 0 && !known {
+		return nil, ErrTooOld
+	}
+	return out, nil
+}
+
+// Items is where a product is: its items, each with a quantity and place.
+func (c *Client) Items(ctx context.Context, productID int64) ([]Item, error) {
+	var out struct {
+		Items []Item `json:"items"`
+	}
+	err := c.get(ctx, "/items", url.Values{"product": {strconv.FormatInt(productID, 10)}}, &out)
+	return out.Items, err
 }
 
 // Place is one place. The tracker also sends its children, items and

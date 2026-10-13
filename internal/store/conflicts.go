@@ -20,20 +20,26 @@ const spansSQL = `spans AS (
 	FROM bookings WHERE status <> 'cancelled')`
 
 // familySQL gives room_family(room_id, related_id): each room related to
-// itself, its ancestors and its descendants, following rooms.parent_id.
-// Booking a building takes the rooms in it too, and the other way round,
-// but two rooms in one building are not related. It is a recursive CTE, so
-// start the query with WITH RECURSIVE and put spansSQL after it with a
-// comma. up is each room with the rooms above it; the family is up both
-// ways. UNION (not UNION ALL) keeps a loop in parent_id from running on.
+// itself, and to its ancestors and descendants following rooms.parent_id,
+// where the inner room of the pair is bookable. Booking a building takes
+// the bookable rooms in it too, and the other way round, but two rooms in
+// one building are not related, and a room only the planners use (not
+// bookable) doesn't clash with its building. The rooms in between don't
+// have to be bookable. It is a recursive CTE, so start the query with WITH
+// RECURSIVE and put spansSQL after it with a comma. up is each room with
+// the rooms above it; the family is the bookable pairs of up both ways.
+// UNION (not UNION ALL) keeps a loop in parent_id from running on.
 const familySQL = `up(room_id, related_id) AS (
 	SELECT id, id FROM rooms
 	UNION
 	SELECT up.room_id, r.parent_id FROM up JOIN rooms r ON r.id = up.related_id WHERE r.parent_id IS NOT NULL),
+pairs(room_id, related_id) AS (
+	SELECT up.room_id, up.related_id FROM up JOIN rooms inner_room ON inner_room.id = up.room_id
+	WHERE up.room_id = up.related_id OR inner_room.bookable = 1),
 room_family(room_id, related_id) AS (
-	SELECT room_id, related_id FROM up
+	SELECT room_id, related_id FROM pairs
 	UNION
-	SELECT related_id, room_id FROM up)`
+	SELECT related_id, room_id FROM pairs)`
 
 // Conflict is two bookings that overlap in the same room, or in rooms one
 // inside the other (Room is the inner one then). A has the lower ID. OK is set when a scheduler marked the pair "that's fine".

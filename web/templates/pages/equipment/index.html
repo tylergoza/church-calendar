@@ -1,0 +1,30 @@
+{{define "content"}}
+<div class="page-head">
+  <div><h1>Equipment</h1><p class="muted">What people can ask for with a room: tables, chairs, sound. Products the tracker offers come in on their own.</p></div>
+  <div class="page-head__actions"><a class="btn btn--primary" href="/equipment/new">Add equipment</a></div>
+</div>
+{{if .Equipment}}
+<div class="table-wrap">
+  <table class="table table--stack">
+    <thead><tr><th>Equipment</th><th>Asked as</th><th>Offered with</th><th>Where it is now</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+      {{range .Equipment}}
+        <tr {{if .Archived}}class="is-archived"{{end}}>
+          <td data-label="Equipment"><strong>{{.Name}}</strong>{{if .FromTracker}} <span class="badge badge--public">Tracker</span>{{end}}{{if .Archived}} <span class="badge badge--locked">Archived</span>{{end}}</td>
+          <td data-label="Asked as">{{if .Service}}Yes or no{{else}}How many{{if .Total}} ({{.Total}}){{end}}{{end}}</td>
+          <td data-label="Offered with">{{if .Rooms}}{{range $i, $n := .Rooms}}{{if $i}}, {{end}}{{$n}}{{end}}{{else}}<span class="muted">Not offered anywhere yet</span>{{end}}</td>
+          <td data-label="Where it is now">{{if .Where}}{{template "equipment-where" .Where}}{{else}}<span class="muted">n/a</span>{{end}}</td>
+          <td class="actions"><a class="btn btn--ghost btn--sm" href="/equipment/{{.ID}}/edit">{{if .FromTracker}}View{{else}}Edit{{end}}</a></td>
+        </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="empty">
+  <h2>No equipment yet</h2>
+  <p>Add what people can ask for with a room.</p>
+</div>
+{{end}}
+<p class="muted small">{{if .ShowArchived}}<a href="/equipment">Hide archived equipment</a>{{else}}<a href="/equipment?archived=1">Show archived equipment</a>{{end}}</p>
+{{end}}

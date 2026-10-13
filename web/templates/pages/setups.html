@@ -1,0 +1,48 @@
+{{define "content"}}
+<div class="page-head">
+  <div><h1>Setups</h1>
+    <p class="muted">What the next two weeks of bookings ask for, and what is still set up from before.{{if not .TrackerOn}} Mark a line <strong>In use</strong> when it's set up and <strong>In storage</strong> when it's put away; it stays as marked whatever the booking's times.{{end}}</p></div>
+</div>
+{{range .Days}}
+<section class="section setup-day">
+  <h2 class="section__title">{{fmtDate .Date}} <span class="muted small">{{relDays .Date}}</span></h2>
+  <ul class="pick-list card">
+    {{range .Items}}{{$b := .Booking}}
+    <li><span><a href="/calendar/{{$b.ID}}"><strong>{{$b.Title}}</strong></a><br><span class="muted small">{{$b.When}} · {{$b.RoomNames}}</span></span>
+      <ul class="equip-list">
+        {{range .Equip.Lines}}
+        <li class="equip-line">
+          <span>{{if .Service}}<strong>{{.Name}}</strong>{{with .Note}} <span class="muted">· {{.}}</span>{{end}}{{else}}{{.Quantity}} × <strong>{{.Name}}</strong>{{end}}</span>
+          {{if gt .Short 0}}<span class="equip-short">short by {{.Short}}</span>{{end}}
+          {{if and $.User.CanSchedule (not $.TrackerOn) (not .Service)}}{{template "equipment-toggle" (dict "BookingID" $b.ID "Line" .EquipmentLine "CSRF" $.CSRF "Back" $.Back)}}{{end}}
+        </li>
+        {{end}}
+      </ul></li>
+    {{end}}
+  </ul>
+</section>
+{{else}}
+<div class="empty">No bookings in the next two weeks ask for equipment.</div>
+{{end}}
+<section class="section">
+  <h2 class="section__title">Still set up</h2>
+  {{if .TrackerOn}}
+    {{if .Still}}
+    <p class="muted small">Equipment the tracker has sitting in a calendar room.</p>
+    <ul class="pick-list card">
+      {{range .Still}}<li><span><strong>{{.Name}}</strong> <span class="muted">· {{.Place.Quantity}} in <a href="/rooms/{{.Place.RoomID}}">{{.Place.Path}}</a></span></span></li>{{end}}
+    </ul>
+    {{else}}<p class="muted">Nothing is sitting in a calendar room.</p>{{end}}
+  {{else}}
+    {{if .InUse}}
+    <p class="muted small">Lines marked In use that haven't been put in storage, so it's clear what needs taking down.</p>
+    <ul class="pick-list card">
+      {{range .InUse}}{{$b := .Booking}}
+      <li><span><strong>{{.Line.Name}}</strong> <span class="muted">· {{.Line.Quantity}} in {{with $b.RoomNames}}{{.}}{{else}}no room{{end}}, since {{.Since}}, <a href="/calendar/{{$b.ID}}">{{$b.Title}}</a> ({{$b.When}})</span></span>
+        {{template "equipment-toggle" (dict "BookingID" $b.ID "Line" .Line "CSRF" $.CSRF "Back" $.Back)}}</li>
+      {{end}}
+    </ul>
+    {{else}}<p class="muted">Nothing is marked In use.</p>{{end}}
+  {{end}}
+</section>
+{{end}}

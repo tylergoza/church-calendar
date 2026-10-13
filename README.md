@@ -26,7 +26,7 @@ are kept as a thin copy or an ID plus a cached name.
 | Connected app | What it adds | What this calendar keeps |
 |---------------|--------------|--------------------------|
 | Nothing (alone) | Rooms and bookings made by hand, [room requests](#room-requests), the public calendar, `.ics` feeds, the [read API](#reading-the-calendar-from-elsewhere), local login | Its own users, rooms and bookings |
-| Maintenance tracker | **Import from tracker** for rooms, and a sync every 15 minutes: rooms marked bookable in the tracker appear on the request form by themselves, inside their building. A hand-made room with the same name is taken over | The tracker's place ID, a cached name or path, its kind, the building it's in and whether it's bookable |
+| Maintenance tracker | **Import from tracker** for rooms, and a sync every 15 minutes: rooms marked bookable in the tracker appear on the request form by themselves, inside their building. A hand-made room with the same name is taken over. Products set **On the church calendar** in the tracker can be asked for with a booking in the rooms they're offered with; where they are comes from the tracker | The tracker's place ID, a cached name or path, its kind, the building it's in and whether it's bookable. For equipment: the product ID, name, how it's asked, total, offered rooms and where its items are |
 | Event planner | Its events arrive by push, and **Make this an event** appears on hand-made bookings and approved requests. Its `/calendar` redirects here | A thin copy of each event: times, rooms, title, public description, visibility, link back. Never notes, tasks, helpers or needs |
 | Production planner | Its rehearsals and performances arrive by push | The same thin copy. Never cast, mics or readiness |
 | [User Management](#single-sign-on) | Sign in with a church account, and roles. Local login is the break-glass | A local user row linked to the User Management ID, so bookings stay |
@@ -78,8 +78,9 @@ Users page has a role select, and `create-user` takes `--role`.
 ## Room requests
 
 `/request` shows the bookable rooms, grouped by building, and whether each
-is free as people pick times. Booking a building makes every room in it
-busy, and booking a room makes its building busy.
+is free as people pick times. Booking a building makes every bookable room
+in it busy, and booking a bookable room makes its building busy. Rooms
+that aren't bookable (only the planners use them) don't count.
 
 - **Signed-in members book.** When every room is free it's booked
   (confirmed) straight away. If anything is in the way (including pending
@@ -101,6 +102,33 @@ busy, and booking a room makes its building busy.
 There's no email yet: people get a `/request/{id}?code=…` link to check
 back on.
 
+### Equipment and help
+
+People can ask for equipment (tables, chairs, the inflatables) and help
+(Sound, Lighting) with their rooms, in **Equipment and help** on
+`/request`. Schedulers get the same on hand-made bookings.
+
+- **What's offered** follows the rooms picked: each piece of equipment is
+  offered only with the rooms chosen for it. A building means the
+  building booked whole, not the rooms inside. Counted things show how
+  many aren't asked for then ("28 of 40 not asked for then").
+- **Never refused.** Asking for more than there is still books the rooms
+  (members) or sends the request (visitors); the line is flagged **short
+  by N** for schedulers, and the person is told a scheduler will be in
+  touch. Pending and pencilled-in bookings count; cancelled ones don't.
+  Services are never short.
+- **`/equipment`** (admins): the list, made by hand when the calendar
+  runs alone. With the tracker connected, equipment comes from products
+  set **On the church calendar** and is read-only here.
+- **`/setups`** (schedulers): the next two weeks of bookings with
+  equipment, and what's **still set up**. There are no set-up or
+  tear-down times: with the tracker, where equipment is comes from its
+  items; alone, each counted line has an **In use / In storage** toggle
+  that stays on until someone turns it off.
+- **Short** on `/requests` lists upcoming bookings asking for too much.
+- Equipment is private: only schedulers, admins and the booking's owner
+  see it, never busy blocks, `.ics` or the API without a token.
+
 ## Reading the calendar from elsewhere
 
 - `/calendar.ics` is the public feed (no token): public bookings, and busy
@@ -110,7 +138,9 @@ back on.
   `/api/v1/events/{id}` and `/api/v1/events.ics` (which also takes
   `?token=`), with `from`, `to` and `room`. An admin makes read tokens
   (`cal_…`) on **API tokens**; one with "Can see private events" also gets
-  private bookings in full. Locked bookings are only ever busy.
+  private bookings in full. Locked bookings are only ever busy. Bookings
+  seen in full carry `equipment: [{name, tracker_product_id, quantity,
+  note, short}]` (the tracker reads it for set-ups).
 - `/calendar/by-source/{source}/{id}` sends the apps' old calendar links to
   the booking they pushed.
 

@@ -75,6 +75,7 @@ func (s *Server) routes() http.Handler {
 	sched("GET /rooms/new", s.handleRoomNew)
 	sched("GET /rooms/import", s.handleRoomImport)
 	sched("POST /rooms/import", s.handleRoomImportRun)
+	sched("POST /rooms/import/equipment", s.handleEquipmentSyncRun)
 	sched("POST /rooms", s.handleRoomCreate)
 	sched("GET /rooms/{id}/edit", s.handleRoomEdit)
 	sched("POST /rooms/{id}", s.handleRoomUpdate)
@@ -89,11 +90,18 @@ func (s *Server) routes() http.Handler {
 	sched("GET /requests/{id}", s.handleRequestShow)
 	sched("POST /requests/{id}/approve", s.handleRequestApprove)
 	sched("POST /requests/{id}/decline", s.handleRequestDecline)
+	sched("GET /setups", s.handleSetups)
+	sched("POST /calendar/{id}/equipment/{equipment_id}/in-use", s.handleLineInUse)
 	sched("GET /conflicts", s.handleConflicts)
 	sched("POST /conflicts/ok", s.handleConflictOK)
 
 	// Admins
 	admin := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.requireAdmin(h)) }
+	admin("GET /equipment", s.handleEquipment)
+	admin("GET /equipment/new", s.handleEquipmentNew)
+	admin("POST /equipment", s.handleEquipmentCreate)
+	admin("GET /equipment/{id}/edit", s.handleEquipmentEdit)
+	admin("POST /equipment/{id}", s.handleEquipmentUpdate)
 	admin("GET /admin/users", s.handleUsers)
 	admin("GET /admin/users/new", s.handleUserNew)
 	admin("POST /admin/users", s.handleUserCreate)

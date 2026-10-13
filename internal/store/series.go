@@ -148,9 +148,10 @@ func templateOf(q querier, sr *Series) (int64, error) {
 	return id, err
 }
 
-// makeOccurrence copies the template booking, with its rooms, to date as a
-// date of the series. A multi-day booking keeps its length. A cancelled
-// template still makes confirmed dates: cancelling is for one date.
+// makeOccurrence copies the template booking, with its rooms and equipment
+// (not the In use toggle), to date as a date of the series. A multi-day
+// booking keeps its length. A cancelled template still makes confirmed
+// dates: cancelling is for one date.
 func makeOccurrence(tx *sql.Tx, seriesID, tpl int64, date string) (int64, error) {
 	var starts, ends string
 	if err := tx.QueryRow(`SELECT starts_on, ends_on FROM bookings WHERE id = ?`, tpl).Scan(&starts, &ends); err != nil {
@@ -171,8 +172,12 @@ func makeOccurrence(tx *sql.Tx, seriesID, tpl int64, date string) (int64, error)
 	if err != nil {
 		return 0, err
 	}
-	_, err = tx.Exec(`INSERT INTO booking_rooms (booking_id, room_id, room_name)
-		SELECT ?, room_id, room_name FROM booking_rooms WHERE booking_id = ?`, id, tpl)
+	if _, err := tx.Exec(`INSERT INTO booking_rooms (booking_id, room_id, room_name)
+		SELECT ?, room_id, room_name FROM booking_rooms WHERE booking_id = ?`, id, tpl); err != nil {
+		return 0, err
+	}
+	_, err = tx.Exec(`INSERT INTO booking_equipment (booking_id, equipment_id, name, quantity, note)
+		SELECT ?, equipment_id, name, quantity, note FROM booking_equipment WHERE booking_id = ?`, id, tpl)
 	return id, err
 }
 

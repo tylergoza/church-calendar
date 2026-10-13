@@ -1,12 +1,34 @@
 {{define "content"}}
 <div class="page-head">
-  <div><h1>{{if eq .Status "waiting"}}Waiting for approval{{else}}Room requests{{end}}</h1>
+  <div><h1>{{if eq .Status "waiting"}}Waiting for approval{{else if eq .Status "short"}}Short of equipment{{else}}Room requests{{end}}</h1>
     <p class="muted">{{if eq .Status "waiting"}}Visitors' requests waiting for approval; their rooms are held as pending. {{end}}Approving a request confirms its booking. People see the answer, and any note, on the link they were given.</p></div>
 </div>
 <nav class="tabs" aria-label="Requests by status">
   {{range .Statuses}}<a href="/requests?status={{.}}" {{if eq . $.Status}}aria-current="page"{{end}}>{{requestStatusLabel .}}</a>{{end}}
+  <a href="/requests?status=short" {{if eq .Status "short"}}aria-current="page"{{end}}>Short</a>
 </nav>
-{{if .Requests}}
+{{if eq .Status "short"}}
+{{if .ShortRows}}
+<p class="muted">Upcoming bookings asking for more than there is at the same time. Nothing is refused: sort it out with the people asking.</p>
+<div class="table-wrap">
+  <table class="table table--stack">
+    <thead><tr><th>Booking</th><th>When</th><th>Rooms</th><th>Short</th></tr></thead>
+    <tbody>
+      {{range .ShortRows}}
+      <tr>
+        <td><a href="/calendar/{{.Booking.ID}}"><strong>{{.Booking.Title}}</strong></a>{{if .RequestID}}<br><a class="small" href="/requests/{{.RequestID}}">Its request</a>{{end}}</td>
+        <td data-label="When">{{.Booking.When}}</td>
+        <td data-label="Rooms">{{.Booking.RoomNames}}</td>
+        <td data-label="Short">{{range .Lines}}<span class="equip-short">{{.Name}}: short by {{.Short}}</span><br>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="empty">Nothing is short.</div>
+{{end}}
+{{else if .Requests}}
 <div class="table-wrap">
   <table class="table table--stack">
     <thead><tr><th>Request</th><th>When</th><th>Rooms</th><th>Asked by</th></tr></thead>

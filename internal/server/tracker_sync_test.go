@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -209,5 +210,208 @@ func TestTrackerSyncWithoutBookableFlag(t *testing.T) {
 	}
 	if rm := roomNamed(t, st, "104 – Nursery"); rm == nil || !rm.Bookable {
 		t.Errorf("nursery = %+v, want still bookable", rm)
+	}
+}
+
+// equipTracker is a fake tracker with products and items, and switches to
+// make calls fail.
+type equipTracker struct {
+	places, products string
+	items            map[string]string // product ID -> items JSON
+	failProducts     bool
+	failItems        bool
+	old              bool // doesn't know about booking: sends no "booking" field
+	url              string
+}
+
+func (f *equipTracker) serve(t *testing.T) string {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/places":
+			io.WriteString(w, `{"places": [`+f.places+`]}`)
+		case "/api/v1/products":
+			if f.failProducts {
+				w.WriteHeader(http.StatusBadGateway)
+				return
+			}
+			p := f.products
+			if f.old {
+				p = strings.ReplaceAll(strings.ReplaceAll(p, `"booking": "count", `, ""), `"booking": "service", `, "")
+			}
+			io.WriteString(w, `{"products": [`+p+`]}`)
+		case "/api/v1/items":
+			if f.failItems {
+				w.WriteHeader(http.StatusBadGateway)
+				return
+			}
+			io.WriteString(w, `{"items": [`+f.items[r.URL.Query().Get("product")]+`]}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(ts.Close)
+	f.url = ts.URL
+	return ts.URL
+}
+
+func (f *equipTracker) config() Config {
+	env := map[string]string{"TRACKER_URL": f.url, "TRACKER_TOKEN": "mt_good1234"}
+	return Config{Env: func(k string) string { return env[k] }}
+}
+
+func (f *equipTracker) server(t *testing.T) *Server {
+	t.Helper()
+	f.serve(t)
+	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	srv, err := New(f.config(), st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return srv
+}
+
+func equipmentNamed(t *testing.T, st *store.Store, name string) *store.Equipment {
+	t.Helper()
+	list, _ := st.ListEquipment(true)
+	for i := range list {
+		if list[i].Name == name {
+			return &list[i]
+		}
+	}
+	return nil
+}
+
+const (
+	tablesProduct = `{"id": 7, "name": "Round tables", "booking": "count", "total": 50, "notes": "Seats eight", "offered_in": [2, 4]}`
+	soundProduct  = `{"id": 8, "name": "Sound", "booking": "service", "total": 0, "notes": "", "offered_in": [2]}`
+)
+
+func TestTrackerSyncEquipment(t *testing.T) {
+	f := &equipTracker{
+		places:   strings.Join([]string{syncSite, syncMain, syncNursery}, ","),
+		products: tablesProduct + "," + soundProduct,
+		items: map[string]string{"7": `
+			{"id": 1, "product_id": 7, "quantity": 30, "place": {"id": 2, "path": "Campus › Main building"}},
+			{"id": 2, "product_id": 7, "quantity": 5, "place": {"id": 2, "path": "Campus › Main building"}},
+			{"id": 3, "product_id": 7, "quantity": 20, "place": {"id": 77, "path": "Campus › Storage B"}}`},
+	}
+	srv := f.server(t)
+	st := srv.store
+	if _, err := srv.SyncTracker(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	main := roomNamed(t, st, "Main building")
+	tables, sound := equipmentNamed(t, st, "Round tables"), equipmentNamed(t, st, "Sound")
+	if tables == nil || sound == nil || tables.Total != 50 || !sound.Service() {
+		t.Fatalf("tables = %+v, sound = %+v", tables, sound)
+	}
+	if len(tables.RoomIDs) != 2 || len(sound.RoomIDs) != 1 || sound.RoomIDs[0] != main.ID {
+		t.Errorf("rooms: tables %v, sound %v", tables.RoomIDs, sound.RoomIDs)
+	}
+	places, _ := st.EquipmentPlaces()
+	got := places[tables.ID]
+	if len(got) != 2 || got[0].Path != "Campus › Main building" || got[0].Quantity != 35 || got[0].RoomID != main.ID || got[1].Quantity != 20 || got[1].RoomID != 0 {
+		t.Errorf("places = %+v", got)
+	}
+	if len(places[sound.ID]) != 0 {
+		t.Errorf("a service has no places: %+v", places[sound.ID])
+	}
+
+	// Places are replaced each sync; a product that's gone is archived.
+	f.items["7"] = `{"id": 3, "product_id": 7, "quantity": 12, "place": {"id": 4, "path": "Campus › Main building › 104 – Nursery"}}`
+	f.products = tablesProduct
+	if _, err := srv.SyncTracker(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	places, _ = st.EquipmentPlaces()
+	if got := places[tables.ID]; len(got) != 1 || got[0].Quantity != 12 || got[0].RoomID != roomNamed(t, st, "104 – Nursery").ID {
+		t.Errorf("places after = %+v", got)
+	}
+	if s := equipmentNamed(t, st, "Sound"); !s.Archived {
+		t.Error("sound should be archived")
+	}
+}
+
+func TestTrackerSyncEquipmentFailureKeepsEverything(t *testing.T) {
+	f := &equipTracker{
+		places:   strings.Join([]string{syncSite, syncMain}, ","),
+		products: tablesProduct + "," + soundProduct,
+		items:    map[string]string{"7": `{"id": 1, "product_id": 7, "quantity": 30, "place": {"id": 2, "path": "Campus › Main building"}}`},
+	}
+	srv := f.server(t)
+	srv.SyncTracker(context.Background())
+	tables := equipmentNamed(t, srv.store, "Round tables")
+
+	// Products fail: nothing archived. The rooms' sync still goes through.
+	f.failProducts = true
+	f.products = ""
+	if _, err := srv.SyncTrackerEquipment(context.Background()); err == nil {
+		t.Error("expected the failed products call to be reported")
+	}
+	if _, err := srv.SyncTracker(context.Background()); err != nil {
+		t.Errorf("equipment trouble failed the rooms' sync: %v", err)
+	}
+	for _, e := range []string{"Round tables", "Sound"} {
+		if equipmentNamed(t, srv.store, e).Archived {
+			t.Errorf("%s was archived by a failed call", e)
+		}
+	}
+
+	// Items fail: equipment is still synced, the last places stay.
+	f.failProducts, f.failItems = false, true
+	f.products = strings.Replace(tablesProduct, `"total": 50`, `"total": 60`, 1) + "," + soundProduct
+	if _, err := srv.SyncTrackerEquipment(context.Background()); err == nil {
+		t.Error("expected the failed items call to be reported")
+	}
+	if e := equipmentNamed(t, srv.store, "Round tables"); e.Total != 60 {
+		t.Errorf("total = %d, want the product update to go through", e.Total)
+	}
+	if places, _ := srv.store.EquipmentPlaces(); len(places[tables.ID]) != 1 || places[tables.ID][0].Quantity != 30 {
+		t.Errorf("places = %+v, want the last ones kept", places[tables.ID])
+	}
+}
+
+func TestTrackerSyncEquipmentOldTracker(t *testing.T) {
+	f := &equipTracker{
+		places:   strings.Join([]string{syncSite, syncMain}, ","),
+		products: tablesProduct,
+		items:    map[string]string{},
+	}
+	srv := f.server(t)
+	srv.SyncTracker(context.Background())
+	f.old = true
+	res, err := srv.SyncTrackerEquipment(context.Background())
+	if err != nil || res.Changed() {
+		t.Errorf("an old tracker should be nothing to sync: %+v, %v", res, err)
+	}
+	if e := equipmentNamed(t, srv.store, "Round tables"); e == nil || e.Archived {
+		t.Errorf("an old tracker archived equipment: %+v", e)
+	}
+}
+
+func TestEquipmentSyncPage(t *testing.T) {
+	f := &equipTracker{
+		places:   strings.Join([]string{syncSite, syncMain}, ","),
+		products: tablesProduct,
+		items:    map[string]string{},
+	}
+	f.serve(t)
+	c, st := newTestServerWith(t, f.config())
+	st.CreateUser("sam", "", "a long password", store.RoleScheduler)
+	sched := c.as("sam")
+	if body := sched.get("/rooms/import", 200); !strings.Contains(body, "No equipment comes from the tracker yet") {
+		t.Errorf("before the sync:\n%s", body)
+	}
+	sched.post("/rooms/import", "/rooms/import/equipment", url.Values{}, 200)
+	if body := sched.get("/rooms/import", 200); !strings.Contains(body, "1 piece of equipment comes from the tracker") {
+		t.Errorf("after the sync:\n%s", body)
+	}
+	if equipmentNamed(t, st, "Round tables") == nil {
+		t.Error("the sync button didn't sync")
 	}
 }

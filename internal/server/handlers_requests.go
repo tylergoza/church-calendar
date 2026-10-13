@@ -119,9 +119,14 @@ func (s *Server) requestForm(w http.ResponseWriter, r *http.Request, status int,
 		return
 	}
 	loose, groups := groupRooms(everyRoom, rooms)
+	equip, err := s.formEquipmentRows(rooms, req.Equipment, req.StartsOn, req.StartTime, req.EndsOn, req.EndTime, 0)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	u := currentUser(r)
 	data := map[string]any{
-		"Title": "Ask for a room", "Form": req, "Rooms": rooms, "Loose": loose, "Groups": groups, "Picked": isPicked, "Errors": errs,
+		"Title": "Ask for a room", "Form": req, "Rooms": rooms, "Loose": loose, "Groups": groups, "Picked": isPicked, "Errors": errs, "Equip": equip,
 		"PublicHeader": u == nil, "Today": s.today(),
 	}
 	if u != nil {
@@ -192,6 +197,7 @@ func looksLikeEmail(v string) bool {
 // must be among the bookable ones. Visitors must give a phone number;
 // signed-in people's accounts say who they are.
 func (s *Server) readRequest(r *http.Request, req *store.Request) ([]int64, []string, error) {
+	req.Equipment = nil
 	visitor := currentUser(r) == nil
 	req.Name, req.Contact, req.Title = formStr(r, "name"), formStr(r, "contact"), formStr(r, "title")
 	req.Phone = formStr(r, "phone")
@@ -250,7 +256,12 @@ func (s *Server) readRequest(r *http.Request, req *store.Request) ([]int64, []st
 	if len(rooms) == 0 {
 		errs = append(errs, "Pick at least one room.")
 	}
-	return rooms, errs, nil
+	lines, equipErrs, err := s.readEquipment(r, rooms)
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Equipment = lines
+	return rooms, append(errs, equipErrs...), nil
 }
 
 func (s *Server) handleRequestCreate(w http.ResponseWriter, r *http.Request) {
@@ -294,7 +305,12 @@ func (s *Server) handleRequestCreate(w http.ResponseWriter, r *http.Request) {
 			s.serverError(w, r, err)
 			return
 		}
-		s.redirect(w, r, requestURL(req.ID, req.Code), "Booked. The rooms were free, so they're yours.")
+		note, err := s.bookingShortNote(req.BookingID)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		s.redirect(w, r, requestURL(req.ID, req.Code), "Booked. The rooms were free, so they're yours."+note)
 		return
 	}
 	s.requestLimiter.fail(ip) // counts sent requests, not failures
@@ -302,7 +318,12 @@ func (s *Server) handleRequestCreate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	s.redirect(w, r, requestURL(req.ID, req.Code), "Your request was sent. Keep the link to this page to check on it.")
+	note, err := s.bookingShortNote(req.BookingID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.redirect(w, r, requestURL(req.ID, req.Code), "Your request was sent. Keep the link to this page to check on it."+note)
 }
 
 // busyErrors says what's in the way of a booking, one line per room: busy
@@ -351,6 +372,15 @@ func busyWhen(b store.Booking, overDays bool) string {
 type availability struct {
 	Ready bool                  `json:"ready"` // false until the times make sense
 	Rooms map[string]roomStatus `json:"rooms"`
+	// Equipment is how much of each counted piece is not yet asked for at
+	// those times, by equipment ID. except=<booking ID> leaves that
+	// booking out (the form that changes it).
+	Equipment map[string]equipLeft `json:"equipment"`
+}
+
+type equipLeft struct {
+	Total int `json:"total"`
+	Left  int `json:"left"`
 }
 
 type roomStatus struct {
@@ -371,7 +401,7 @@ func (s *Server) handleRequestAvailability(w http.ResponseWriter, r *http.Reques
 	if endsOn == startsOn {
 		endsOn = ""
 	}
-	out := availability{Rooms: map[string]roomStatus{}}
+	out := availability{Rooms: map[string]roomStatus{}, Equipment: map[string]equipLeft{}}
 	if len(checkWhen(startsOn, startTime, endsOn, endTime)) > 0 {
 		json.NewEncoder(w).Encode(out)
 		return
@@ -401,6 +431,25 @@ func (s *Server) handleRequestAvailability(w http.ResponseWriter, r *http.Reques
 			st.Busy = append(st.Busy, busyWhen(b, endsOn != ""))
 		}
 		out.Rooms[strconv.FormatInt(id, 10)] = st
+	}
+	asked, err := s.store.EquipmentAskedFor(startsOn, startTime, endsOn, endTime, queryInt(r, "except"))
+	if err != nil {
+		s.log.Error("availability", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"internal error"}`))
+		return
+	}
+	all, err := s.store.ListEquipment(false)
+	if err != nil {
+		s.log.Error("availability", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"internal error"}`))
+		return
+	}
+	for _, e := range all {
+		if !e.Service() {
+			out.Equipment[strconv.FormatInt(e.ID, 10)] = equipLeft{Total: e.Total, Left: max(0, e.Total-asked[e.ID])}
+		}
 	}
 	json.NewEncoder(w).Encode(out)
 }
@@ -474,6 +523,10 @@ func (s *Server) handleRequestWithdraw(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
+	if status == "short" {
+		s.handleShortBookings(w, r)
+		return
+	}
 	if !slices.Contains(store.RequestStatuses, status) {
 		status = "waiting"
 	}
@@ -533,6 +586,25 @@ func (s *Server) requestPage(w http.ResponseWriter, r *http.Request, status int,
 		if b, err := s.store.GetBooking(req.BookingID); err == nil {
 			data["MakeEventURL"] = s.makeEventURL(b)
 		}
+	}
+	// What it asks for: the booking's lines when it has one (they know how
+	// short they are), the request's own otherwise.
+	var lines []store.EquipmentLine
+	var eb *store.Booking
+	if req.BookingID != 0 {
+		if eb, err = s.store.GetBooking(req.BookingID); err == nil {
+			lines, err = s.store.BookingEquipment(eb.ID)
+		}
+	} else {
+		lines, err = s.store.RequestEquipment(req.ID)
+	}
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		s.serverError(w, r, err)
+		return
+	}
+	if data["Equip"], err = s.buildEquipView(lines, eb, true, false, ""); err != nil {
+		s.serverError(w, r, err)
+		return
 	}
 	if req.UserID != 0 {
 		if asker, err := s.store.GetUser(req.UserID); err == nil {

@@ -40,7 +40,8 @@ func ownRequestBooking(tx *sql.Tx, id int64) (bookingID, userID int64, err error
 }
 
 // UpdateOwnRequest saves the member's changes to their request (r.ID says
-// which): title, times, rooms, head count and details. Its booking is
+// which): title, times, rooms, head count, details and equipment
+// (r.Equipment replaces what it asked for; equipment never stops it). Its booking is
 // changed with it and stays (or becomes) confirmed. The new times and
 // rooms are checked like a new booking, ignoring the booking itself, in
 // the same transaction as the save: if any room is busy nothing changes
@@ -78,6 +79,9 @@ func (s *Store) UpdateOwnRequest(r *Request, roomIDs []int64) (map[int64][]Booki
 			return nil, err
 		}
 	}
+	if err := setRequestEquipment(tx, r.ID, r.Equipment); err != nil {
+		return nil, err
+	}
 	r.Status = "approved"
 	if bookingID == 0 {
 		r.UserID = userID
@@ -93,6 +97,9 @@ func (s *Store) UpdateOwnRequest(r *Request, roomIDs []int64) (map[int64][]Booki
 		return nil, err
 	}
 	if err := setRooms(tx, bookingID, roomIDs); err != nil {
+		return nil, err
+	}
+	if err := copyRequestEquipment(tx, r.ID, bookingID); err != nil {
 		return nil, err
 	}
 	return nil, tx.Commit()

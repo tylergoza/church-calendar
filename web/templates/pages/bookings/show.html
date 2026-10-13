@@ -26,6 +26,7 @@
   {{if .CanSee}}{{with $b.Description}}<p>{{range lines .}}{{.}}<br>{{end}}</p>{{end}}{{end}}
   {{if and .User .CanSee (not $b.HandMade)}}<p class="hint">This booking comes from the {{.Source}}, so it's changed there.</p>{{end}}
 </div>
+{{template "equipment-card" (dict "V" .Equip "B" $b "CSRF" .CSRF)}}
 {{if and .User.CanSchedule $b.Cancelled}}
 <div class="card">
   <h2 class="section__title">Cancelled</h2>

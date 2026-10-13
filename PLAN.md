@@ -44,7 +44,7 @@ is off and the app behaves as if the other app doesn't exist.
 | Setup | What works |
 |-------|-----------|
 | Calendar alone | Rooms typed in by hand, bookings made by hand (with simple repeats), room requests, public calendar, `.ics`, read API, local login |
-| + Maintenance tracker | **Import rooms** from the tracker's places; rooms keep the tracker's place ID and cached name, as the planners do |
+| + Maintenance tracker | **Import rooms** from the tracker's places; rooms keep the tracker's place ID and cached name, as the planners do. Products set **On the church calendar** become equipment, and where it is comes from the tracker's items |
 | + Event planner | Its events arrive by push; the **Send all events to the calendar** button in the calendar section of its **Connections** page backfills what it already has. Its own `/calendar` redirects here |
 | + Production planner | Its rehearsals and performances arrive by push, backfilled by the same kind of admin button |
 | + User Management | Single sign-on; local login off, as in the other apps |
@@ -187,8 +187,27 @@ Migration `002_pending_bookings.sql` (see `BOOKING_PLAN.md`):
 - `rooms.kind` (the tracker's `building`, `room`, `area`; '' for hand-made)
   and `rooms.parent_id` (the building it's in). A room and the rooms it's
   inside or contains count as the same space for busy checks and
-  conflicts. `rooms.bookable` follows the tracker for imported rooms.
+  conflicts, as long as the inner room is bookable (a room only the
+  planners use doesn't clash with its building). `rooms.bookable` follows the tracker for imported rooms.
 - `rooms.needs_approval` is no longer used (the column stays).
+
+Migration `003_equipment.sql` (see `EQUIPMENT_PLAN.md`):
+
+- `equipment`: things people can ask for with a booking. A thin copy of
+  the tracker's products set **On the church calendar**
+  (`tracker_product_id`), or made by hand. `mode` is `count` (asked how
+  many, up to `total`) or `service` (yes or no with a note, never runs
+  out).
+- `equipment_rooms`: the rooms it's offered with, exact match only (a
+  building offer is for the building booked whole). None = not offered.
+- `request_equipment` and `booking_equipment`: what was asked for, with a
+  quantity (1 for a service) and a note. The booking keeps the name, like
+  `booking_rooms.room_name`, and the **In use / In storage** toggle
+  (`in_use`, when and by whom), used only while the tracker is off.
+- `equipment_places`: where each counted piece of tracker equipment is,
+  from its items, replaced on every sync.
+- Shortages (**short by N**) are worked out when read, like conflicts:
+  what overlapping bookings that aren't cancelled ask for, over the total.
 
 Plus `users`, `sessions`, `settings`, and `series` (hand-made repeats),
 copied from the event planner. Conflicts are **worked out when read**
@@ -279,12 +298,14 @@ Same limits as today: `from` defaults to today, `to` to 90 days on, at most
 | `/calendar/{id}` | One booking. Links to the owning app for signed-in people |
 | `/calendar/by-source/{source}/{source_id}` | Redirects to that booking, so the apps can send old links here |
 | `/rooms`, `/rooms/{id}` | Rooms and a week view of each. Schedulers: add, edit, archive; **Import from tracker** |
-| `/request` | Members book, visitors ask: pick rooms (grouped by building) and times, see which are free as you go |
+| `/request` | Members book, visitors ask: pick rooms (grouped by building) and times, see which are free as you go, and ask for the equipment and help offered with those rooms |
 | `/request/{id}`, `/request/{id}/edit` | The person's status page (code link, or signed in). Owners edit or cancel; visitors withdraw while it's pending |
 | `/my/bookings` | A signed-in person's own requests and bookings |
-| `/requests` | Schedulers: Waiting (the approval queue), approved, declined, withdrawn, cancelled. Approve (confirms the pending booking), decline with a note, **Make this an event** |
+| `/requests` | Schedulers: Waiting (the approval queue), approved, declined, withdrawn, cancelled, and **Short** (upcoming bookings asking for more equipment than there is). Approve (confirms the pending booking), decline with a note, **Make this an event** |
 | `/bookings/new`, `/bookings/{id}/edit` | Hand-made bookings with simple repeats. Bookings from another app are read-only here, with a link to edit them there |
 | `/conflicts` | Clashes from today on, grouped by room, with "That's fine" |
+| `/equipment` | Admins: equipment people can ask for with a booking, how it's asked (how many / yes or no), the rooms it's offered with and where it is now. Equipment from the tracker is read-only here |
+| `/setups` | Schedulers: the next two weeks of bookings with equipment, by day, with **short by N** and the **In use / In storage** toggle (tracker off); then **Still set up** |
 | `/admin/tokens`, `/admin/apps`, `/admin/users`, `/admin/settings`, `/admin/connections` | As in the event planner. **Connected apps** shows each source, its last push and how many bookings it has, with a reminder that the backfill button is on that app's own **Connections** page (the calendar can't pull, the apps push) |
 
 **Make this an event** builds
@@ -321,7 +342,7 @@ after **Test sign-in**):
   there's an SMTP setup the other apps can share.
 - Two-way sync with Google/Outlook calendars. The `.ics` feed covers
   reading.
-- Booking equipment. That's the planners' "needs" and the tracker.
+- Booking equipment for the planners. Their "needs" stay in the planners. Equipment asked for with a room request or hand-made booking is planned in `EQUIPMENT_PLAN.md`.
 
 ## Steps
 

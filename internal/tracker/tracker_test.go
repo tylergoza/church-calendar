@@ -214,3 +214,78 @@ func TestPlacesJSONRoundTrip(t *testing.T) {
 		t.Errorf("unexpected decode: %+v", p)
 	}
 }
+
+func equipmentTracker(t *testing.T, products string) *Client {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/products":
+			if r.URL.Query().Get("booking") == "1" {
+				w.Write([]byte(products))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error":"not found"}`))
+		case "/api/v1/items":
+			if r.URL.Query().Get("product") != "7" {
+				t.Errorf("Items asked for %q", r.URL.RawQuery)
+			}
+			w.Write([]byte(`{"items": [
+			  {"id": 1, "product_id": 7, "quantity": 30, "place": {"id": 9, "path": "Main Campus › Lifecenter"}},
+			  {"id": 2, "product_id": 7, "quantity": 20, "place": {"id": 11, "path": "Main Campus › Storage B"}}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return New(srv.URL, "secret")
+}
+
+func TestProducts(t *testing.T) {
+	c := equipmentTracker(t, `{"products": [
+	  {"id": 7, "name": "Round tables", "booking": "count", "total": 50, "notes": "Seats eight", "offered_in": [9, 4]},
+	  {"id": 8, "name": "Sound", "booking": "service", "total": 0, "notes": "", "offered_in": [9]},
+	  {"id": 9, "name": "Ladder", "booking": "", "total": 2, "notes": "", "offered_in": []}]}`)
+	got, err := c.Products(context.Background(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d products, want the 2 that are offered: %+v", len(got), got)
+	}
+	if p := got[0]; p.ID != 7 || p.Name != "Round tables" || p.Booking != "count" || p.Total != 50 || p.Notes != "Seats eight" || len(p.OfferedIn) != 2 || p.OfferedIn[0] != 9 {
+		t.Errorf("product decoded wrong: %+v", p)
+	}
+	if got[1].Booking != "service" {
+		t.Errorf("service decoded wrong: %+v", got[1])
+	}
+}
+
+func TestProductsTooOld(t *testing.T) {
+	// An old tracker ignores booking=1 and sends products without the field.
+	c := equipmentTracker(t, `{"products": [{"id": 7, "name": "Round tables", "total": 50}]}`)
+	if _, err := c.Products(context.Background(), true); !errors.Is(err, ErrTooOld) {
+		t.Errorf("Products from an old tracker = %v, want ErrTooOld", err)
+	}
+	// No products at all is a real answer, not an old tracker.
+	c = equipmentTracker(t, `{"products": []}`)
+	if got, err := c.Products(context.Background(), true); err != nil || len(got) != 0 {
+		t.Errorf("Products with none = %v, %v", got, err)
+	}
+	// A tracker that 404s on the question is too old as well.
+	c = equipmentTracker(t, `{"products": []}`)
+	if _, err := c.Products(context.Background(), false); !errors.Is(err, ErrTooOld) {
+		t.Errorf("Products(false) on a 404 = %v, want ErrTooOld", err)
+	}
+}
+
+func TestItems(t *testing.T) {
+	c := equipmentTracker(t, `{"products": []}`)
+	items, err := c.Items(context.Background(), 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0].Quantity != 30 || items[0].Place.ID != 9 || items[1].Place.Path != "Main Campus › Storage B" {
+		t.Errorf("items decoded wrong: %+v", items)
+	}
+}

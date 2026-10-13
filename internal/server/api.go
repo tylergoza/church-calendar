@@ -139,6 +139,19 @@ type apiEventJSON struct {
 	Description string   `json:"description,omitempty"`
 	Public      bool     `json:"public"`
 	URL         string   `json:"url,omitempty"` // omitted when busy
+	// Equipment is what the booking asks for (the tracker reads it for
+	// set-ups). Omitted when busy or asking for nothing.
+	Equipment []apiEquipmentJSON `json:"equipment,omitempty"`
+}
+
+// apiEquipmentJSON is one thing a booking asks for. Short is how many more
+// are asked for at the same time than there are (0 for services).
+type apiEquipmentJSON struct {
+	Name             string `json:"name"`
+	TrackerProductID int64  `json:"tracker_product_id,omitempty"` // omitted when made by hand
+	Quantity         int    `json:"quantity"`
+	Note             string `json:"note"`
+	Short            int    `json:"short"`
 }
 
 func roomNames(rooms []store.BookingRoom) []string {
@@ -147,6 +160,28 @@ func roomNames(rooms []store.BookingRoom) []string {
 		out[i] = r.Name
 	}
 	return out
+}
+
+// apiEquipment loads what the bookings the token sees in full ask for,
+// keyed by booking ID. Busy blocks never carry equipment.
+func (s *Server) apiEquipment(list []store.CalendarEntry) (map[int64][]apiEquipmentJSON, error) {
+	var ids []int64
+	for _, e := range list {
+		if !e.Busy {
+			ids = append(ids, e.ID)
+		}
+	}
+	lines, err := s.store.BookingsEquipment(ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64][]apiEquipmentJSON, len(lines))
+	for id, ls := range lines {
+		for _, l := range ls {
+			out[id] = append(out[id], apiEquipmentJSON{Name: l.Name, TrackerProductID: l.ProductID, Quantity: l.Quantity, Note: l.Note, Short: l.Short})
+		}
+	}
+	return out, nil
 }
 
 func (s *Server) apiEventJSON(r *http.Request, e store.CalendarEntry) apiEventJSON {
@@ -223,9 +258,18 @@ func (s *Server) apiEvents(w http.ResponseWriter, r *http.Request, tok *store.To
 		s.apiServerError(w, r, err)
 		return
 	}
+	equipment, err := s.apiEquipment(list)
+	if err != nil {
+		s.apiServerError(w, r, err)
+		return
+	}
 	out := make([]apiEventJSON, 0, len(list))
 	for _, e := range list {
-		out = append(out, s.apiEventJSON(r, e))
+		j := s.apiEventJSON(r, e)
+		if !e.Busy {
+			j.Equipment = equipment[e.ID]
+		}
+		out = append(out, j)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": out})
 }
@@ -238,7 +282,15 @@ func (s *Server) apiEvent(w http.ResponseWriter, r *http.Request, tok *store.Tok
 		s.apiServerError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.apiEventJSON(r, store.CalendarEntry{Booking: *b}))
+	e := store.CalendarEntry{Booking: *b}
+	equipment, err := s.apiEquipment([]store.CalendarEntry{e})
+	if err != nil {
+		s.apiServerError(w, r, err)
+		return
+	}
+	j := s.apiEventJSON(r, e)
+	j.Equipment = equipment[e.ID]
+	writeJSON(w, http.StatusOK, j)
 }
 
 // iCalendar ------------------------------------------------------------------
