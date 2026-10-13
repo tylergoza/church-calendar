@@ -11,6 +11,11 @@ Ansible, calendar views) from `../event_planning`, the newest sibling.
   are done.
 - Every app must run alone. Links to other apps are optional and off
   unless their URL and token are set (the `Configured()` pattern).
+- Shared kinds of data (places/rooms, items, events, users) keep the same
+  shape in every app, matching the owning app's API. A thin local version
+  is a subset of the full one, so when the owning app is connected the
+  local rows start referencing it (its ID plus a cached name) instead of
+  being rebuilt.
 - The calendar keeps a thin copy of other apps' events (times, rooms,
   title, public description, visibility, link). It never edits them, and
   never holds notes, tasks, helpers, cast or needs.
