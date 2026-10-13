@@ -62,6 +62,8 @@ func (s *Server) routes() http.Handler {
 	// Schedulers
 	sched := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.requireScheduler(h)) }
 	sched("GET /rooms/new", s.handleRoomNew)
+	sched("GET /rooms/import", s.handleRoomImport)
+	sched("POST /rooms/import", s.handleRoomImportRun)
 	sched("POST /rooms", s.handleRoomCreate)
 	sched("GET /rooms/{id}/edit", s.handleRoomEdit)
 	sched("POST /rooms/{id}", s.handleRoomUpdate)

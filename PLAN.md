@@ -5,7 +5,7 @@ event, rehearsal, meeting and room booking on one calendar, with room
 conflicts caught across all the apps. People (inside or outside the church)
 can also ask for a room here.
 
-Status: step 5 (push API for apps) built (2026-10-13).
+Status: step 6 (tracker import) built (2026-10-13).
 
 ## The idea in one paragraph
 
@@ -342,9 +342,10 @@ Each step is a working app; stop after any of them.
 - [x] Tests: idempotent PUT, wrong source 403, `replaces`, locked bookings stored without title even if one is sent; plus room matching, tidied times, conflicts by token access, availability, `updated_since`, app tokens and Make this an event
 
 ### 6. Tracker import
-- [ ] `internal/tracker` client (copy from the event planner; only places) and the **Tracker** connection section
-- [ ] **Import from tracker**: pick places to add as rooms; re-running updates names/paths and never duplicates
-- [ ] Bookings stored by name that now match an imported room get linked (`room_id` filled in)
+- [x] `internal/tracker` client (copy from the event planner; only places, plus `Place.Label()`, "number – name" as the tracker shows it) and the **Tracker** connection's Test (asks for place 0: a good token gets "not found")
+- [x] **Import from tracker** (`/rooms/import`, schedulers): pick buildings, rooms and areas to add as rooms, named by the tracker's label. A hand-made room with the same name is taken over. Re-running updates names/paths of every imported room and never duplicates; a name another room has is skipped with a note. Rooms whose place is gone are archived (the tracker deletes places, see `../maintenance_tracking/CALENDAR_PLAN.md`); the page warns first. The result shows on the page, not in a flash
+- [x] Bookings stored by name that now match a room get linked (`room_id` filled in, the room's name stored): by the room's name or, during an import, the place's bare name. Also when a room is added or renamed by hand
+- [x] Tests: tracker client, import/re-import/rename/archive/name clashes in the store, the import page, the connection Test
 
 ### 7. Single sign-on
 - [ ] Copy `internal/sso` from the event planner; `RoleFromSSO` maps `member`/`scheduler`/`admin`

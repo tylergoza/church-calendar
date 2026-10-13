@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="page-head">
   <div><h1>Rooms</h1><p class="muted">The rooms and spaces that can be booked. Bookings in the same room at the same time show on Conflicts.</p></div>
-  {{if .User.CanSchedule}}<div class="page-head__actions"><a class="btn btn--primary" href="/rooms/new">Add room</a></div>{{end}}
+  {{if .User.CanSchedule}}<div class="page-head__actions">{{if .TrackerOn}}<a class="btn" href="/rooms/import">Import from tracker</a>{{end}}<a class="btn btn--primary" href="/rooms/new">Add room</a></div>{{end}}
 </div>
 {{if .Rooms}}
 <div class="table-wrap">
@@ -22,7 +22,7 @@
 {{else}}
 <div class="empty">
   <h2>No rooms yet</h2>
-  <p>{{if .User.CanSchedule}}Add the rooms and spaces people book.{{else}}A scheduler hasn't added any rooms yet.{{end}}</p>
+  <p>{{if .User.CanSchedule}}Add the rooms and spaces people book{{if .TrackerOn}}, or import them from the maintenance tracker{{end}}.{{else}}A scheduler hasn't added any rooms yet.{{end}}</p>
 </div>
 {{end}}
 {{if .User.CanSchedule}}

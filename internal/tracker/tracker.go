@@ -1,0 +1,204 @@
+// Package tracker reads places from the facility maintenance tracker's API,
+// so the calendar can import them as rooms. The API is read-only and
+// authorised with a token an admin makes on the tracker's API page.
+package tracker
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+// ErrNotConfigured means there's no tracker address or token.
+var ErrNotConfigured = errors.New("the maintenance tracker isn't connected; an admin can add it on Connections")
+
+// ErrNotFound is the tracker saying it has no such thing.
+var ErrNotFound = errors.New("not found in the maintenance tracker")
+
+// cacheFor is how long answers are reused, so a page that shows many
+// needs asks the tracker once.
+const cacheFor = time.Minute
+
+type Client struct {
+	BaseURL string // e.g. "https://maintenance.example.org"
+	Token   string
+	HTTP    *http.Client
+
+	mu    sync.Mutex
+	cache map[string]cached
+}
+
+type cached struct {
+	body []byte
+	at   time.Time
+}
+
+func New(baseURL, token string) *Client {
+	return &Client{
+		BaseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		Token:   strings.TrimSpace(token),
+		HTTP:    &http.Client{Timeout: 8 * time.Second},
+		cache:   map[string]cached{},
+	}
+}
+
+func (c *Client) Configured() bool { return c != nil && c.BaseURL != "" && c.Token != "" }
+
+// PageURL links to a page in the tracker itself, e.g. PageURL("place", 4).
+// Kind "place" maps to the tracker's "places" pages.
+func (c *Client) PageURL(kind string, id int64) string {
+	if c == nil || c.BaseURL == "" {
+		return ""
+	}
+	if kind == "place" {
+		kind = "places"
+	}
+	return c.BaseURL + "/" + kind + "/" + strconv.FormatInt(id, 10)
+}
+
+// Forget drops cached answers, e.g. after something was changed there.
+func (c *Client) Forget() {
+	c.mu.Lock()
+	c.cache = map[string]cached{}
+	c.mu.Unlock()
+}
+
+func (c *Client) get(ctx context.Context, path string, q url.Values, out any) error {
+	if !c.Configured() {
+		return ErrNotConfigured
+	}
+	u := c.BaseURL + "/api/v1" + path
+	if len(q) > 0 {
+		u += "?" + q.Encode()
+	}
+	c.mu.Lock()
+	hit, ok := c.cache[u]
+	c.mu.Unlock()
+	if ok && time.Since(hit.at) < cacheFor {
+		return json.Unmarshal(hit.body, out)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return fmt.Errorf("couldn't reach the maintenance tracker: %w", err)
+	}
+	defer resp.Body.Close()
+	var body json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return fmt.Errorf("the maintenance tracker sent something unexpected (HTTP %d)", resp.StatusCode)
+	}
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+		return ErrNotFound
+	case resp.StatusCode == http.StatusUnauthorized:
+		return errors.New("the maintenance tracker turned down the API token; it may have been revoked")
+	case resp.StatusCode != http.StatusOK:
+		var e struct {
+			Error string `json:"error"`
+		}
+		json.Unmarshal(body, &e)
+		return fmt.Errorf("the maintenance tracker said: %s (HTTP %d)", e.Error, resp.StatusCode)
+	}
+	c.mu.Lock()
+	c.cache[u] = cached{body: body, at: time.Now()}
+	c.mu.Unlock()
+	return json.Unmarshal(body, out)
+}
+
+// JSON shape, as the tracker's API sends it -----------------------------------
+
+// Place is a site, building, floor, room or area. ParentID is nil for a
+// site. Path is the full name, e.g. "Main Building › 2nd floor › 104 – Nursery".
+// Kind is one of "site", "building", "floor", "room" or "area".
+type Place struct {
+	ID       int64    `json:"id"`
+	ParentID *int64   `json:"parent_id"`
+	Kind     string   `json:"kind"`
+	Number   string   `json:"number"`
+	Name     string   `json:"name"`
+	Path     string   `json:"path"`
+	Address  string   `json:"address"`
+	Notes    string   `json:"notes"`
+	Tags     []string `json:"tags"`
+	AlsoIn   []int64  `json:"also_in"` // areas only: other places a shared area is in
+}
+
+// Label is the room's name as the tracker shows it: "number – name" when it
+// has a number, else the name.
+func (p Place) Label() string {
+	if p.Number == "" {
+		return p.Name
+	}
+	return p.Number + " – " + p.Name
+}
+
+// Calls ----------------------------------------------------------------------------
+
+// Places is every place, in tree order (parents before children).
+func (c *Client) Places(ctx context.Context) ([]Place, error) {
+	var out struct {
+		Places []Place `json:"places"`
+	}
+	err := c.get(ctx, "/places", nil, &out)
+	return out.Places, err
+}
+
+// Place is one place. The tracker also sends its children, items and
+// supplies; those aren't decoded here.
+func (c *Client) Place(ctx context.Context, id int64) (*Place, error) {
+	var out Place
+	if err := c.get(ctx, "/places/"+strconv.FormatInt(id, 10), nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Rooms is the places something can be booked in (buildings, rooms and
+// areas) that match query, case-insensitively, against name, number or
+// path. An empty query returns all of them, in tree order.
+func (c *Client) Rooms(ctx context.Context, query string) ([]Place, error) {
+	places, err := c.Places(ctx)
+	if err != nil {
+		return nil, err
+	}
+	q := strings.ToLower(strings.TrimSpace(query))
+	var out []Place
+	for _, p := range places {
+		switch p.Kind {
+		case "building", "room", "area":
+		default:
+			continue
+		}
+		if q == "" ||
+			strings.Contains(strings.ToLower(p.Name), q) ||
+			strings.Contains(strings.ToLower(p.Number), q) ||
+			strings.Contains(strings.ToLower(p.Path), q) {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+// Check sees that the address and token work. It asks for a place that
+// can't exist: with a good token the tracker says "not found", with a bad
+// one it says so first.
+func (c *Client) Check(ctx context.Context) error {
+	var out struct{}
+	if err := c.get(ctx, "/places/0", nil, &out); !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	return nil
+}

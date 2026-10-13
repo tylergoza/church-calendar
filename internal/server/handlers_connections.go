@@ -13,6 +13,7 @@ import (
 
 	"github.com/tylergoza/church-calendar/internal/connections"
 	"github.com/tylergoza/church-calendar/internal/store"
+	"github.com/tylergoza/church-calendar/internal/tracker"
 )
 
 // Connections to other apps -------------------------------------------------
@@ -41,6 +42,9 @@ var connectionDefs = []connections.Def{
 // connectionChecks test a connection live and answer in plain words. A
 // connection without one has no Test button yet.
 var connectionChecks = map[string]func(context.Context, connections.Resolved) error{
+	"tracker": func(ctx context.Context, r connections.Resolved) error {
+		return tracker.New(r.Get("tracker_url"), r.Get("tracker_token")).Check(ctx)
+	},
 	"events": func(ctx context.Context, r connections.Resolved) error {
 		return checkHealthz(ctx, r.Get("events_url"))
 	},

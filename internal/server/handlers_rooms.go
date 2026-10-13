@@ -20,6 +20,7 @@ func (s *Server) handleRooms(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, r, http.StatusOK, "rooms/index", map[string]any{
 		"Title": "Rooms", "Rooms": rooms, "ShowArchived": r.URL.Query().Get("archived") == "1",
+		"TrackerOn": s.tracker().Configured(),
 	})
 }
 
