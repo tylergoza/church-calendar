@@ -22,6 +22,8 @@ import (
 // What a token sees follows store.Access: public bookings in full, private
 // ones too when the token may see them, and locked ones only as busy.
 //
+// The push API, for apps sending their own bookings, is in api_push.go.
+//
 // These routes ignore sessions and cookies (see isCookieFree), so they
 // need no CSRF protection and never set a cookie.
 
@@ -36,6 +38,7 @@ func (s *Server) apiRoutes(mux *http.ServeMux) {
 	api("GET /api/v1/events/{id}", s.requireReadToken(false, s.apiEvent))
 	api("GET /api/v1/events.ics", s.requireReadToken(true, s.apiICS))
 	api("GET /calendar.ics", s.publicICS)
+	s.pushRoutes(api)
 	api("OPTIONS /api/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	api("OPTIONS /calendar.ics", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	api("/api/", func(w http.ResponseWriter, r *http.Request) { apiError(w, http.StatusNotFound, "no such endpoint") })
@@ -55,9 +58,15 @@ func (s *Server) apiHandler(next http.HandlerFunc) http.HandlerFunc {
 
 type tokenHandler func(w http.ResponseWriter, r *http.Request, tok *store.Token)
 
-// requireReadToken checks the bearer token. allowQuery also takes ?token=,
-// for the .ics feed: calendar apps subscribe by URL and can't send headers.
+// requireReadToken checks the bearer token is a read token. allowQuery
+// also takes ?token=, for the .ics feed: calendar apps subscribe by URL
+// and can't send headers.
 func (s *Server) requireReadToken(allowQuery bool, next tokenHandler) http.HandlerFunc {
+	return s.requireToken(store.TokenRead, allowQuery, next)
+}
+
+// requireToken checks the bearer token is of the kind given ("" for any).
+func (s *Server) requireToken(kind string, allowQuery bool, next tokenHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "private, no-store")
 		raw, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -79,8 +88,12 @@ func (s *Server) requireReadToken(allowQuery bool, next tokenHandler) http.Handl
 			s.apiServerError(w, r, err)
 			return
 		}
-		if tok.Kind != store.TokenRead {
+		switch {
+		case kind == store.TokenRead && tok.Kind != store.TokenRead:
 			apiError(w, http.StatusForbidden, "that's an app's token; reading the calendar needs a read token")
+			return
+		case kind == store.TokenSource && tok.Kind != store.TokenSource:
+			apiError(w, http.StatusForbidden, "that's a read token; sending bookings needs an app's token")
 			return
 		}
 		next(w, r, tok)

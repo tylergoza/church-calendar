@@ -3,8 +3,10 @@ package server
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/tylergoza/church-calendar/internal/recur"
 	"github.com/tylergoza/church-calendar/internal/store"
@@ -32,6 +34,32 @@ func sourceLabel(source string) string {
 		return "Production planner"
 	}
 	return source
+}
+
+// makeEventURL is the event planner's new-event form filled in from a
+// hand-made booking (Make this an event). The planner sends replaces with
+// its first push, and the calendar swaps this booking for the event's.
+// "" when the event planner isn't connected or the booking isn't
+// hand-made.
+func (s *Server) makeEventURL(b *store.Booking) string {
+	base := s.EventsURL()
+	if base == "" || !b.HandMade() {
+		return ""
+	}
+	q := url.Values{"from_calendar": {strconv.FormatInt(b.ID, 10)}, "title": {b.Title}, "starts_on": {b.StartsOn}}
+	for k, v := range map[string]string{"ends_on": b.EndsOn, "start_time": b.StartTime, "end_time": b.EndTime} {
+		if v != "" {
+			q.Set(k, v)
+		}
+	}
+	if len(b.Rooms) > 0 {
+		names := make([]string, len(b.Rooms))
+		for i, r := range b.Rooms {
+			names[i] = r.Name
+		}
+		q.Set("rooms", strings.Join(names, ","))
+	}
+	return base + "/events/new?" + q.Encode()
 }
 
 // TopUpSeries makes the dates repeating bookings are due, up to six months
@@ -112,6 +140,7 @@ func (s *Server) handleBookingShow(w http.ResponseWriter, r *http.Request) {
 		data["Repeats"] = sr.Rule.Describe()
 	}
 	if u.CanSchedule() {
+		data["MakeEventURL"] = s.makeEventURL(b)
 		clashes, err := s.store.ConflictsWith(b.ID)
 		if err != nil {
 			s.serverError(w, r, err)

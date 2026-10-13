@@ -1,67 +1,104 @@
+{{define "token-rows"}}
+  {{$csrf := .CSRF}}
+  <div class="table-wrap">
+    <table class="table table--stack">
+      <thead><tr><th>Used by</th>{{if .Apps}}<th>App</th>{{end}}<th>Token</th><th>Private events</th><th>Made</th><th>Last used</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+        {{range .Tokens}}
+          <tr>
+            <td data-label="Used by"><strong>{{.Name}}</strong></td>
+            {{if $.Apps}}<td data-label="App">{{source .Source}}</td>{{end}}
+            <td data-label="Token"><code>{{.Prefix}}…</code></td>
+            <td data-label="Private events">{{if .SeePrivate}}Yes{{else}}<span class="muted">No</span>{{end}}</td>
+            <td data-label="Made"><span class="small">{{fmtTime .CreatedAt}}{{with .CreatedBy}} by {{.}}{{end}}</span></td>
+            <td data-label="Last used"><span class="small">{{if .LastUsed}}{{fmtTime .LastUsed}}{{else}}<span class="muted">Never</span>{{end}}</span></td>
+            <td class="actions">
+              <form method="post" action="/admin/tokens/{{.ID}}/private" class="inline-form">
+                {{template "csrf" $csrf}}
+                <input type="hidden" name="private" value="{{if .SeePrivate}}0{{else}}1{{end}}">
+                <button type="submit" class="btn btn--ghost btn--sm">{{if .SeePrivate}}Hide private events{{else}}Show private events{{end}}</button>
+              </form>
+              {{template "delete-button" (dict "Action" (printf "/admin/tokens/%d/delete" .ID) "CSRF" $csrf "Label" "Revoke" "Confirm" (printf "Revoke the token for %s? It will stop working right away." .Name))}}
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+{{end}}
+
 {{define "content"}}
 <div class="page-head">
-  <div><h1>API tokens</h1><p class="muted">Tokens let another site or app read events. A token sees public events and when rooms are busy; tick "Can see private events" to show private events' details too (never locked ones). Apps that send their events here get their own tokens with the push API.</p></div>
+  <div><h1>API tokens</h1><p class="muted">Read tokens let another site or app read events. Apps that send their events here (the event planner, the production planner) each get an app token.</p></div>
 </div>
 
 {{if .NewToken}}
 <div class="card narrow">
   <h2 class="section__title">Your new token</h2>
-  <p>Copy it now and keep it somewhere safe, like the other site's settings. It won't be shown again; if it's lost, revoke it and make another.</p>
+  <p>Copy it now and keep it somewhere safe, like the other {{if eq .NewKind "source"}}app's Connections page{{else}}site's settings{{end}}. It won't be shown again; if it's lost, revoke it and make another.</p>
   <p><code class="token">{{.NewToken}}</code></p>
-  <p class="muted small">The app sends it with each request as <code>Authorization: Bearer {{.NewToken}}</code>. A calendar app can subscribe to <code>{{.APIBase}}/events.ics?token={{.NewToken}}</code>.</p>
+  {{if eq .NewKind "source"}}
+    <p class="muted small">Paste it into the calendar section of that app's <strong>Connections</strong> page, with this calendar's address. Then use that page's send-everything button to bring over what it already has.</p>
+  {{else}}
+    <p class="muted small">The app sends it with each request as <code>Authorization: Bearer {{.NewToken}}</code>. A calendar app can subscribe to <code>{{.APIBase}}/events.ics?token={{.NewToken}}</code>.</p>
+  {{end}}
 </div>
 {{end}}
 
-{{if .Tokens}}
 <section class="section">
-<div class="table-wrap">
-  <table class="table table--stack">
-    <thead><tr><th>Used by</th><th>Token</th><th>Private events</th><th>Made</th><th>Last used</th><th><span class="sr-only">Actions</span></th></tr></thead>
-    <tbody>
-      {{range .Tokens}}
-        <tr>
-          <td data-label="Used by"><strong>{{.Name}}</strong></td>
-          <td data-label="Token"><code>{{.Prefix}}…</code></td>
-          <td data-label="Private events">{{if .SeePrivate}}Yes{{else}}<span class="muted">No</span>{{end}}</td>
-          <td data-label="Made"><span class="small">{{fmtTime .CreatedAt}}{{with .CreatedBy}} by {{.}}{{end}}</span></td>
-          <td data-label="Last used"><span class="small">{{if .LastUsed}}{{fmtTime .LastUsed}}{{else}}<span class="muted">Never</span>{{end}}</span></td>
-          <td class="actions">
-            <form method="post" action="/admin/tokens/{{.ID}}/private" class="inline-form">
-              {{template "csrf" $.CSRF}}
-              <input type="hidden" name="private" value="{{if .SeePrivate}}0{{else}}1{{end}}">
-              <button type="submit" class="btn btn--ghost btn--sm">{{if .SeePrivate}}Hide private events{{else}}Show private events{{end}}</button>
-            </form>
-            {{template "delete-button" (dict "Action" (printf "/admin/tokens/%d/delete" .ID) "CSRF" $.CSRF "Label" "Revoke" "Confirm" (printf "Revoke the token for %s? It will stop working right away." .Name))}}
-          </td>
-        </tr>
-      {{end}}
-    </tbody>
-  </table>
-</div>
+  <h2 class="section__title">Read tokens</h2>
+  <p class="muted small">A read token sees public events and when rooms are busy; tick "Can see private events" to show private events' details too (never locked ones).</p>
+  {{if .Tokens}}{{template "token-rows" (dict "Tokens" .Tokens "CSRF" .CSRF "Apps" false)}}{{end}}
+  <div class="card narrow">
+    <h3 class="section__title">Make a read token</h3>
+    {{template "errors" .ReadForm.Errors}}
+    <form method="post" action="/admin/tokens" class="form">
+      {{template "csrf" .CSRF}}
+      <input type="hidden" name="kind" value="read">
+      <div class="field">
+        <label for="name">What will use it</label>
+        <input id="name" name="name" value="{{.ReadForm.Name}}" required maxlength="100" placeholder="e.g. Church website">
+      </div>
+      <label class="check"><input type="checkbox" name="see_private" value="1" {{if .ReadForm.Private}}checked{{end}}> Can see private events</label>
+      <div class="form__actions"><button type="submit" class="btn btn--primary">Make read token</button></div>
+    </form>
+  </div>
 </section>
-{{end}}
+
+<section class="section">
+  <h2 class="section__title">App tokens</h2>
+  <p class="muted small">An app token lets one app send its own events here, and nothing else's. It also sees when rooms are busy, for that app's clash warnings; "Can see private events" shows it what's booking them (never locked ones). See <a href="/admin/apps">Connected apps</a> for what each app has sent.</p>
+  {{if .AppTokens}}{{template "token-rows" (dict "Tokens" .AppTokens "CSRF" .CSRF "Apps" true)}}{{end}}
+  <div class="card narrow">
+    <h3 class="section__title">Make an app token</h3>
+    {{template "errors" .AppForm.Errors}}
+    <form method="post" action="/admin/tokens" class="form">
+      {{template "csrf" .CSRF}}
+      <input type="hidden" name="kind" value="source">
+      <div class="field">
+        <label for="source">App</label>
+        <select id="source" name="source" required>
+          {{range .Sources}}<option value="{{.ID}}" {{if eq .ID $.AppForm.Source}}selected{{end}}>{{.Label}}</option>{{end}}
+        </select>
+      </div>
+      <div class="field">
+        <label for="app_name">Name</label>
+        <input id="app_name" name="name" value="{{.AppForm.Name}}" required maxlength="100" placeholder="e.g. Event planner">
+      </div>
+      <label class="check"><input type="checkbox" name="see_private" value="1" {{if .AppForm.Private}}checked{{end}}> Can see private events</label>
+      <div class="form__actions"><button type="submit" class="btn btn--primary">Make app token</button></div>
+    </form>
+  </div>
+</section>
 
 <div class="card narrow">
-  <h2 class="section__title">Make a token</h2>
-  {{template "errors" .Errors}}
-  <form method="post" action="/admin/tokens" class="form">
-    {{template "csrf" .CSRF}}
-    <div class="field">
-      <label for="name">What will use it</label>
-      <input id="name" name="name" value="{{.Name}}" required maxlength="100" placeholder="e.g. Church website">
-    </div>
-    <label class="check"><input type="checkbox" name="see_private" value="1" {{if .Private}}checked{{end}}> Can see private events</label>
-    <div class="form__actions"><button type="submit" class="btn btn--primary">Make token</button></div>
-  </form>
-</div>
-
-<div class="card narrow">
-  <h2 class="section__title">What it can read</h2>
+  <h2 class="section__title">What a read token can read</h2>
   <p class="muted small">JSON from <code>{{.APIBase}}</code>, with <code>from</code> and <code>to</code> dates (YYYY-MM-DD, at most 400 days apart) and an optional <code>room</code>:</p>
   <ul class="plain-list small">
     <li><code>GET /events</code>: events in the range, each with its <code>source</code> (<code>events</code>, <code>productions</code>, <code>calendar</code> or <code>request</code>). Ones the token can't see show as busy, with only their rooms and times.</li>
     <li><code>GET /events/{id}</code>: one event the token can see.</li>
     <li><code>GET /events.ics</code>: the same as a calendar feed; it also takes <code>?token=</code>.</li>
+    <li><code>GET /rooms</code> and <code>GET /availability?rooms=Lifecenter,Kitchen</code>: the rooms, and what's booked in them.</li>
   </ul>
   <p class="muted small">No token is needed for <code>{{.CalendarURL}}</code>, the public calendar feed: public events, and busy times for the rest.</p>
 </div>

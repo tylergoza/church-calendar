@@ -12,7 +12,9 @@
       <h1>{{with $b.RoomNames}}{{.}} unavailable{{else}}Busy{{end}}</h1>
     {{end}}
   </div>
-  {{if and .User.CanSchedule $b.HandMade}}<div class="page-head__actions"><a class="btn btn--ghost" href="/bookings/{{$b.ID}}/edit">Edit</a></div>{{end}}
+  {{if and .User.CanSchedule $b.HandMade}}<div class="page-head__actions">
+    {{with .MakeEventURL}}<a class="btn btn--ghost" href="{{.}}" title="Opens the event planner with this filled in; the event then takes this booking's place">Make this an event</a>{{end}}
+    <a class="btn btn--ghost" href="/bookings/{{$b.ID}}/edit">Edit</a></div>{{end}}
 </div>
 <div class="card">
   <dl class="details">

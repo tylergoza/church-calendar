@@ -401,6 +401,11 @@ func (s *Server) requestPage(w http.ResponseWriter, r *http.Request, status int,
 		capacity[rm.ID] = rm.Capacity
 	}
 	data["Capacity"] = capacity
+	if req.BookingID != 0 && s.EventsURL() != "" {
+		if b, err := s.store.GetBooking(req.BookingID); err == nil {
+			data["MakeEventURL"] = s.makeEventURL(b)
+		}
+	}
 	if req.UserID != 0 {
 		if asker, err := s.store.GetUser(req.UserID); err == nil {
 			data["Asker"] = asker

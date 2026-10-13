@@ -1,0 +1,26 @@
+{{define "content"}}
+<div class="page-head">
+  <div><h1>Connected apps</h1><p class="muted">Apps that send their events here, each with its own app token. The calendar can't fetch an app's events; the app sends them. To bring over what an app already has, use the send-everything button in the calendar section of that app's own <strong>Connections</strong> page.</p></div>
+</div>
+<div class="table-wrap">
+  <table class="table table--stack">
+    <thead><tr><th>App</th><th>Tokens</th><th>Last sent</th><th>Bookings</th><th>Last change</th><th><span class="sr-only">Links</span></th></tr></thead>
+    <tbody>
+      {{range .Apps}}
+        <tr>
+          <td data-label="App"><strong>{{.Label}}</strong></td>
+          <td data-label="Tokens">{{if .Tokens}}{{.Tokens}}{{else}}<span class="muted">None yet</span>{{end}}</td>
+          <td data-label="Last sent"><span class="small">{{if .LastUsed}}{{fmtTime .LastUsed}}{{else}}<span class="muted">Never</span>{{end}}</span></td>
+          <td data-label="Bookings">{{.Bookings}} <span class="muted small">({{.Upcoming}} coming up)</span></td>
+          <td data-label="Last change"><span class="small">{{if .LastChange}}{{fmtTime .LastChange}}{{else}}<span class="muted">None</span>{{end}}</span></td>
+          <td class="actions">
+            {{if .ConnectionsURL}}<a class="btn btn--ghost btn--sm" href="{{.ConnectionsURL}}">Its Connections page</a>{{end}}
+            {{if not .Tokens}}<a class="btn btn--ghost btn--sm" href="/admin/tokens">Make a token</a>{{end}}
+          </td>
+        </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+<p class="muted small">"Last sent" is when one of the app's tokens was last used (to within a minute). Deleting an event in the app removes its booking here, so the counts can go down.</p>
+{{end}}
