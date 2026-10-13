@@ -22,6 +22,7 @@
   {{if $q.BookingID}}<p><a href="/calendar/{{$q.BookingID}}">See the booking</a>{{with .MakeEventURL}} · <a href="{{.}}">Make this an event</a>{{end}}</p>{{end}}
   {{with $q.Answer}}<p class="muted small">Note back: {{.}}</p>{{end}}
 </div>
+{{template "equipment-card" (dict "V" .Equip "CSRF" .CSRF)}}
 {{if $q.Waiting}}
   {{if .Busy}}
   <div class="card card--alert">

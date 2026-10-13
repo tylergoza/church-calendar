@@ -9,10 +9,16 @@ import { Controller } from "@hotwired/stimulus"
 //     <input name="starts_on" data-availability-target="field"> …
 //     <span data-availability-target="room" data-room-id="3"></span>
 //
+// The same answer says how many of each counted piece of equipment are
+// not yet asked for at those times:
+//     <span data-availability-target="equipment" data-equipment-id="7" data-total="40"></span>
+// A form for changing a booking sets data-availability-except-value to its
+// ID so it doesn't count against itself.
+//
 // Without JavaScript the form still works; the scheduler sees clashes.
 export default class extends Controller {
-  static targets = ["field", "room"]
-  static values = { url: String }
+  static targets = ["field", "room", "equipment"]
+  static values = { url: String, except: Number }
 
   connect() {
     this.check()
@@ -32,6 +38,7 @@ export default class extends Controller {
   async load() {
     const params = new URLSearchParams()
     this.fieldTargets.forEach((field) => params.set(field.name, field.value))
+    if (this.exceptValue) params.set("except", this.exceptValue)
     this.abort?.abort()
     this.abort = new AbortController()
     let data
@@ -40,16 +47,22 @@ export default class extends Controller {
         headers: { Accept: "application/json" },
         signal: this.abort.signal,
       })
-      if (!response.ok) return this.show({})
+      if (!response.ok) return this.show({}, {})
       data = await response.json()
     } catch (error) {
-      if (error.name !== "AbortError") this.show({})
+      if (error.name !== "AbortError") this.show({}, {})
       return
     }
-    this.show(data.ready ? data.rooms : {})
+    this.show(data.ready ? data.rooms : {}, data.ready ? data.equipment || {} : {})
   }
 
-  show(rooms) {
+  show(rooms, equipment) {
+    this.equipmentTargets.forEach((el) => {
+      const status = equipment[el.dataset.equipmentId]
+      el.textContent = status
+        ? `${status.left} of ${status.total} not asked for then`
+        : `${el.dataset.total} in all`
+    })
     this.roomTargets.forEach((el) => {
       const status = rooms[el.dataset.roomId]
       el.classList.toggle("avail--free", !!status?.free)

@@ -1,0 +1,71 @@
+{{define "equipment-fields"}}
+{{if .}}
+<fieldset class="fieldset" data-controller="equipment" data-action="change@document->equipment#sync">
+  <legend>Equipment and help</legend>
+  <p class="hint">Ask for what you need set up. What's offered depends on the rooms you pick.</p>
+  <ul class="equip-list">
+    {{range .}}
+    <li class="equip" data-equipment-target="row" data-equipment-rooms="{{.Rooms}}">
+      {{if .E.Service}}
+      <label class="check"><input type="checkbox" name="equip_{{.E.ID}}" value="1" {{if .Qty}}checked{{end}}> {{.E.Name}}</label>
+      <input class="equip__note" name="equip_note_{{.E.ID}}" value="{{.Note}}" maxlength="200" placeholder="Anything we should know? (optional)" aria-label="Note for {{.E.Name}}">
+      {{else}}
+      <label class="equip__label" for="equip_{{.E.ID}}">{{.E.Name}}</label>
+      <input class="equip__qty" id="equip_{{.E.ID}}" name="equip_{{.E.ID}}" type="number" min="0" max="{{.E.Total}}" inputmode="numeric" value="{{if .Qty}}{{.Qty}}{{end}}" placeholder="0">
+      <span class="hint equip__left" data-availability-target="equipment" data-equipment-id="{{.E.ID}}" data-total="{{.E.Total}}">{{if .Known}}{{.Left}} of {{.E.Total}} not asked for then{{else}}{{.E.Total}} in all{{end}}</span>
+      {{end}}
+      {{with .E.Notes}}<p class="hint equip__notes">{{.}}</p>{{end}}
+    </li>
+    {{end}}
+  </ul>
+</fieldset>
+{{end}}
+{{end}}
+
+{{/* Where a counted piece of equipment is now: from the tracker's items, or from the In use / In storage toggle. */}}
+{{define "equipment-where"}}
+{{with .}}
+  {{if .Tracker}}
+    {{if .Places}}<span class="equip-where">{{range $i, $p := .Places}}{{if $i}}, {{end}}{{$p.Quantity}} in {{if $p.RoomID}}<a href="/rooms/{{$p.RoomID}}">{{$p.Path}}</a>{{else}}{{$p.Path}}{{end}}{{end}} <span class="muted">(set in the tracker)</span></span>
+    {{else}}<span class="equip-where muted">Not in the tracker's list of places</span>{{end}}
+  {{else}}
+    <span class="equip-where">
+    {{range $i, $u := .InUse}}{{if $i}}; {{end}}{{if gt $u.Line.Quantity 1}}{{$u.Line.Quantity}} {{end}}In use in {{with $u.Booking.RoomNames}}{{.}}{{else}}no room{{end}}
+      <span class="muted">(since {{$u.Since}}, <a href="/calendar/{{$u.Booking.ID}}">{{$u.Booking.Title}}</a>)</span>{{end}}
+    {{if $.Known}}{{if $.Storage}}{{if $.InUse}}; {{end}}{{$.Storage}} in storage{{end}}{{else if not $.InUse}}In storage{{end}}
+    </span>
+  {{end}}
+{{end}}
+{{end}}
+
+{{/* The In use / In storage button for one counted line. Schedulers, tracker off. */}}
+{{define "equipment-toggle"}}
+<form method="post" action="/calendar/{{.BookingID}}/equipment/{{.Line.EquipmentID}}/in-use" class="inline-form">
+  {{template "csrf" .CSRF}}
+  <input type="hidden" name="in_use" value="{{if .Line.InUse}}0{{else}}1{{end}}">
+  <input type="hidden" name="back" value="{{.Back}}">
+  {{if .Line.InUse}}<span class="badge badge--warn">In use</span> <button type="submit" class="btn btn--ghost btn--sm">Put in storage</button>
+  {{else}}<span class="badge">In storage</span> <button type="submit" class="btn btn--ghost btn--sm">Mark in use</button>{{end}}
+</form>
+{{end}}
+
+{{/* What a request or booking asks for. .V is an equipView; .B the booking (for the toggle). */}}
+{{define "equipment-card"}}
+{{with .V}}
+<div class="card">
+  <h2 class="section__title">Equipment and help</h2>
+  <ul class="equip-list">
+    {{range .Lines}}
+    <li class="equip-line">
+      <span>{{if .Service}}<strong>{{.Name}}</strong>{{with .Note}} <span class="muted">· {{.}}</span>{{end}}{{else}}{{.Quantity}} × <strong>{{.Name}}</strong>{{with .Note}} <span class="muted">· {{.}}</span>{{end}}{{end}}</span>
+      {{if and $.V.Staff (gt .Short 0)}}<span class="equip-short">short by {{.Short}}</span>{{end}}
+      {{if and $.V.Staff .Clashes}}<span class="muted small equip-line__also">Also asked for then by:
+        {{range $i, $o := .Clashes}}{{if $i}}, {{end}}<a href="/calendar/{{$o.ID}}">{{$o.Title}}</a>{{end}}</span>{{end}}
+      {{if and $.V.Staff .Where}}<span class="small equip-line__also">{{template "equipment-where" .Where}}</span>{{end}}
+      {{if and $.V.Toggle (not .Service)}}{{template "equipment-toggle" (dict "BookingID" $.B.ID "Line" .EquipmentLine "CSRF" $.CSRF "Back" $.V.Back)}}{{end}}
+    </li>
+    {{end}}
+  </ul>
+</div>
+{{end}}
+{{end}}

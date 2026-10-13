@@ -591,3 +591,26 @@ select:disabled { opacity: .6; }
 
 .cancel-form { margin-top: 8px; }
 .cancel-form .field { margin-bottom: 8px; }
+
+/* Equipment */
+.table tr.is-archived { opacity: .6; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 12px; }
+.facts dt { font-weight: 600; }
+.facts dd { margin: 0; }
+
+/* ---------- Equipment on bookings ---------- */
+
+.fieldset[hidden], .equip[hidden] { display: none; }
+.equip-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.equip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.equip__label { font-weight: 500; min-width: 8rem; }
+.equip input.equip__qty { width: 5.5rem; }
+.equip input.equip__note { flex: 1 1 14rem; }
+.equip__notes { flex-basis: 100%; margin: 0; }
+
+/* Equipment: schedulers */
+.equip-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.equip-line__also { flex-basis: 100%; }
+.equip-short { color: var(--overdue); font-weight: 600; }
+.equip-where { display: inline; }
+.setup-day { margin-bottom: 20px; }

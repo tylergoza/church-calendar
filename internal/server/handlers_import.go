@@ -114,6 +114,18 @@ func (s *Server) renderRoomImport(w http.ResponseWriter, r *http.Request, result
 		}
 	}
 	data["Places"], data["Gone"] = list, gone
+	equipment, err := s.store.ListEquipment(false)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	fromTracker := 0
+	for _, e := range equipment {
+		if e.FromTracker() {
+			fromTracker++
+		}
+	}
+	data["Equipment"] = fromTracker
 	s.render(w, r, http.StatusOK, "rooms/import", data)
 }
 
@@ -150,4 +162,32 @@ func (s *Server) handleRoomImportRun(w http.ResponseWriter, r *http.Request) {
 	s.log.Info("rooms imported from tracker", "user", currentUser(r).Username, "added", len(res.Added),
 		"linked", len(res.Linked), "renamed", len(res.Renamed), "archived", len(res.Archived), "bookings", res.Bookings)
 	s.renderRoomImport(w, r, &res, places, nil)
+}
+
+// handleEquipmentSyncRun brings the equipment that comes from the tracker
+// up to date, then goes back to the import page.
+func (s *Server) handleEquipmentSyncRun(w http.ResponseWriter, r *http.Request) {
+	if !s.tracker().Configured() {
+		s.renderRoomImport(w, r, nil, nil, tracker.ErrNotConfigured)
+		return
+	}
+	res, err := s.SyncTrackerEquipment(r.Context())
+	switch {
+	case err != nil:
+		s.setFlash(w, r, "error", "Equipment wasn't synced: "+err.Error())
+	case res.Changed():
+		var said []string
+		for _, part := range []struct {
+			what  string
+			names []string
+		}{{"Added", res.Added}, {"Now following the tracker", res.Linked}, {"Updated", res.Updated}, {"Archived", res.Archived}, {"Left alone", res.Skipped}} {
+			if len(part.names) > 0 {
+				said = append(said, part.what+": "+strings.Join(part.names, ", ")+".")
+			}
+		}
+		s.setFlash(w, r, "success", "Equipment synced. "+strings.Join(said, " "))
+	default:
+		s.setFlash(w, r, "success", "Equipment was already up to date.")
+	}
+	http.Redirect(w, r, "/rooms/import", http.StatusSeeOther)
 }

@@ -139,6 +139,17 @@ func (s *Server) handleBookingShow(w http.ResponseWriter, r *http.Request) {
 		}
 		data["Repeats"] = sr.Rule.Describe()
 	}
+	if canSeeEquipment(b, u) {
+		lines, err := s.store.BookingEquipment(b.ID)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		if data["Equip"], err = s.buildEquipView(lines, b, u.CanSchedule(), true, bookingURL(b.ID)); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	}
 	if u.CanSchedule() {
 		data["MakeEventURL"] = s.makeEventURL(b)
 		clashes, err := s.store.ConflictsWith(b.ID)
@@ -194,8 +205,21 @@ func (s *Server) bookingForm(w http.ResponseWriter, r *http.Request, status int,
 	if b.ID != 0 {
 		title = "Edit " + b.Title
 	}
+	lines, _ := extra["EquipLines"].([]store.EquipmentLine)
+	if _, ok := extra["EquipLines"]; !ok && b.ID != 0 {
+		if lines, err = s.store.BookingEquipment(b.ID); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	}
+	equip, err := s.formEquipmentRows(rooms, lines, b.StartsOn, b.StartTime, b.EndsOn, b.EndTime, b.ID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	data := map[string]any{
 		"Title": title, "Form": b, "Rooms": rooms, "Picked": isPicked, "Errors": errs, "Statuses": store.BookingStatuses,
+		"Equip": equip,
 	}
 	if b.SeriesID != 0 {
 		sr, err := s.store.GetSeries(b.SeriesID)
@@ -344,6 +368,12 @@ func (s *Server) clashNote(b *store.Booking) (string, error) {
 func (s *Server) handleBookingCreate(w http.ResponseWriter, r *http.Request) {
 	var b store.Booking
 	rooms, errs := readBooking(r, &b)
+	lines, equipErrs, err := s.readEquipment(r, rooms)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	errs = append(errs, equipErrs...)
 	rf, rule, repeats, rerrs := readRepeat(r, b.StartsOn)
 	if repeats && rerrs == nil && errs == nil {
 		// A repeat starts on the pattern's first date, so a start of Monday
@@ -353,12 +383,17 @@ func (s *Server) handleBookingCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if errs = append(errs, rerrs...); errs != nil {
-		s.bookingForm(w, r, http.StatusUnprocessableEntity, b, rooms, errs, map[string]any{"Repeat": rf})
+		s.bookingForm(w, r, http.StatusUnprocessableEntity, b, rooms, errs, map[string]any{"Repeat": rf, "EquipLines": lines})
 		return
 	}
 	b.CreatedBy = currentUser(r).ID
 	id, err := s.store.CreateBooking(&b, rooms)
 	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	// Before MakeSeries, so every date of a repeat gets the equipment.
+	if err := s.store.SetBookingEquipment(id, lines); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -413,7 +448,13 @@ func (s *Server) handleBookingUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	old := *b
 	rooms, errs := readBooking(r, b)
-	extra := map[string]any{}
+	lines, equipErrs, err := s.readEquipment(r, rooms)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	errs = append(errs, equipErrs...)
+	extra := map[string]any{"EquipLines": lines}
 	scope := "this"
 	var rule recur.Rule
 	repeats := false
@@ -443,6 +484,22 @@ func (s *Server) handleBookingUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.UpdateBooking(b, rooms); err != nil {
 		s.serverError(w, r, err)
 		return
+	}
+	if err := s.store.SetBookingEquipment(b.ID, lines); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if b.Source == store.SourceRequest {
+		// Keep what the request asked for in step with its booking.
+		if reqID, err := s.store.RequestForBooking(b.ID); err != nil {
+			s.serverError(w, r, err)
+			return
+		} else if reqID != 0 {
+			if err := s.store.SetRequestEquipment(reqID, lines); err != nil {
+				s.serverError(w, r, err)
+				return
+			}
+		}
 	}
 	msg := "Saved."
 	if scope == "later" {

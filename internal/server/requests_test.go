@@ -307,3 +307,22 @@ func TestRequestAvailability(t *testing.T) {
 		t.Errorf("bad dates: %s", body)
 	}
 }
+
+// A bookable building with no bookable rooms inside is one loose choice,
+// not an empty group.
+func TestGroupRoomsBuildingWithoutBookableRooms(t *testing.T) {
+	all := []store.Room{
+		{ID: 1, Name: "Annex", Bookable: true},
+		{ID: 2, Name: "Annex kitchen", ParentID: 1},
+		{ID: 3, Name: "Main building", Bookable: true},
+		{ID: 4, Name: "Nursery", ParentID: 3, Bookable: true},
+	}
+	bookable := []store.Room{all[0], all[2], all[3]}
+	loose, groups := groupRooms(all, bookable)
+	if len(loose) != 1 || loose[0].Name != "Annex" {
+		t.Errorf("loose = %+v, want only the annex", loose)
+	}
+	if len(groups) != 1 || groups[0].Name != "Main building" || groups[0].Whole == nil || len(groups[0].Rooms) != 1 {
+		t.Errorf("groups = %+v", groups)
+	}
+}

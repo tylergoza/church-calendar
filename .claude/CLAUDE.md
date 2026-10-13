@@ -28,6 +28,15 @@ Ansible, calendar views) from `../event_planning`, the newest sibling.
   family (the room, the buildings it's in, the rooms inside it), where a
   building and a room inside only count together if the inner room is
   bookable. A bookable building is booked whole; it doesn't list its rooms.
+- Equipment shortages are flagged (**short by N**), never refused; pending
+  and tentative bookings count toward them, cancelled don't, services are
+  never short. Shortages are worked out when read, like conflicts.
+  Equipment is offered only with the rooms picked for it (exact match, a
+  building offer is for the building booked whole). No set-up/tear-down
+  windows: where equipment is comes from the tracker's item places, or
+  the In use / In storage toggle when the tracker is off. Equipment is
+  never public: never in busy blocks, `.ics` or the API without a token.
+  The planners' bookings never carry equipment.
 - Visibility rules must match the event planner's (public / private /
   locked = busy). Never show more than rooms and times for busy blocks.
 - Cookies `cal_*`, tokens `cal_…`; local port 8120 (tracker 8080, planner

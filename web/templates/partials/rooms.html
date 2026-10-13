@@ -1,0 +1,26 @@
+{{/* room-checks: bookable rooms as checkboxes grouped by building. Takes a
+dict: Loose ([]store.Room), Groups ([]roomGroup), Name (the field name),
+Picked (map of room ID to bool). A building offered on its own is "Whole
+building" and doesn't tick the rooms inside. */}}
+{{define "room-checks"}}
+{{with .Loose}}
+<ul class="pick-list">
+  {{range .}}{{template "room-check" (dict "R" . "Name" $.Name "Picked" $.Picked)}}{{end}}
+</ul>
+{{end}}
+{{range .Groups}}
+<div class="room-group">
+  <h3 class="room-group__name">{{.Name}}</h3>
+  <ul class="pick-list">
+    {{with .Whole}}{{template "room-check" (dict "R" . "Name" $.Name "Picked" $.Picked "Whole" true)}}{{end}}
+    {{range .Rooms}}{{template "room-check" (dict "R" . "Name" $.Name "Picked" $.Picked)}}{{end}}
+  </ul>
+</div>
+{{end}}
+{{end}}
+
+{{define "room-check"}}
+<li>
+  <label class="check"><input type="checkbox" name="{{.Name}}" value="{{.R.ID}}" {{if index .Picked .R.ID}}checked{{end}}> {{if .Whole}}Whole building{{else}}{{.R.Name}}{{end}}</label>
+</li>
+{{end}}

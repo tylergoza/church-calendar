@@ -94,8 +94,25 @@ func (s *Server) handleMyBookings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	slices.Reverse(upcoming) // soonest first
+	made = append(upcoming, past...)
+
+	// Equipment on their own bookings, for the owner only.
+	var ids []int64
+	for _, row := range rows {
+		if row.Booking != nil {
+			ids = append(ids, row.Booking.ID)
+		}
+	}
+	for _, b := range made {
+		ids = append(ids, b.ID)
+	}
+	equip, err := s.store.BookingsEquipment(ids)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	s.render(w, r, http.StatusOK, "my/bookings", map[string]any{
-		"Title": "My bookings", "Rows": rows, "Made": append(upcoming, past...),
+		"Title": "My bookings", "Rows": rows, "Made": made, "Equip": equip,
 	})
 }
 
@@ -169,9 +186,15 @@ func (s *Server) requestEditForm(w http.ResponseWriter, r *http.Request, status 
 	for _, id := range picked {
 		isPicked[id] = true
 	}
+	equip, err := s.formEquipmentRows(rooms, req.Equipment, req.StartsOn, req.StartTime, req.EndsOn, req.EndTime, req.BookingID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	w.Header().Set("Cache-Control", "private, no-store")
 	s.render(w, r, status, "requests/edit", map[string]any{
 		"Title": "Change " + req.Title, "Form": req, "Rooms": rooms, "Picked": isPicked, "Errors": errs, "Today": s.today(),
+		"Equip": equip,
 	})
 }
 
@@ -180,7 +203,13 @@ func (s *Server) handleRequestEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.requestEditForm(w, r, http.StatusOK, *req, req.RoomIDs(), nil)
+	form := *req
+	var err error
+	if form.Equipment, err = s.store.RequestEquipment(req.ID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.requestEditForm(w, r, http.StatusOK, form, req.RoomIDs(), nil)
 }
 
 func (s *Server) handleRequestUpdate(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +242,12 @@ func (s *Server) handleRequestUpdate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	s.redirect(w, r, requestURL(req.ID, req.Code), "Saved. The rooms are booked for you.")
+	note, err := s.bookingShortNote(form.BookingID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.redirect(w, r, requestURL(req.ID, req.Code), "Saved. The rooms are booked for you."+note)
 }
 
 func (s *Server) handleRequestCancel(w http.ResponseWriter, r *http.Request) {

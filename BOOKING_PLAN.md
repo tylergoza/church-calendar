@@ -5,7 +5,7 @@ The cross-app design is in
 calendar's part. Everything still works with the calendar alone: without
 the tracker, rooms (and their building) are set by hand.
 
-Status: built 2026-10-13, except step 3a (only bookable rooms share busy time with their building), added after. Imported rooms follow the tracker's `bookable` once `../maintenance_tracking/BOOKING_PLAN.md` step 1 is deployed; until then the calendar keeps its own flags.
+Status: built 2026-10-13, step 3a (only bookable rooms share busy time with their building) added after. Imported rooms follow the tracker's `bookable` once `../maintenance_tracking/BOOKING_PLAN.md` step 1 is deployed; until then the calendar keeps its own flags.
 
 From the first deploy on, `001_initial.sql` is frozen, so all of this goes
 in new migrations (`002_…`). Changing a CHECK needs a table rebuild with
@@ -59,10 +59,10 @@ Asked 2026-10-13, after step 3 was built. A bookable building is for
 booking the building whole. Booking it makes the rooms inside busy only
 where the room or area is bookable itself; a room only the planners use
 doesn't clash with its building.
-- [ ] `familySQL` (`internal/store/conflicts.go`): a building-and-room pair is in `room_family` only when the inner room is `bookable`. The room itself always stays in its own family. Used as-is by `spansSQL` users, `Store.conflicts` and the `room=` read query (`internal/store/push.go`)
-- [ ] The intermediate rooms don't have to be bookable: a bookable room in an unbookable area still pairs with its bookable building
-- [ ] `/request` already lists only bookable rooms; check a bookable building with no bookable rooms shows as one loose choice, not an empty group
-- [ ] Tests: building booking makes a bookable room inside busy and the other way round; a planner booking in an unbookable room inside doesn't block the building, nor the building it; unbookable middle area; turning a room's bookable off (by hand or sync) drops the clash
+- [x] `familySQL` (`internal/store/conflicts.go`): a building-and-room pair is in `room_family` only when the inner room is `bookable`. The room itself always stays in its own family. Used as-is by `spansSQL` users, `Store.conflicts` and the `room=` read query (`internal/store/push.go`)
+- [x] The intermediate rooms don't have to be bookable: a bookable room in an unbookable area still pairs with its bookable building
+- [x] `/request` already lists only bookable rooms; check a bookable building with no bookable rooms shows as one loose choice, not an empty group
+- [x] Tests: building booking makes a bookable room inside busy and the other way round; a planner booking in an unbookable room inside doesn't block the building, nor the building it; unbookable middle area; turning a room's bookable off (by hand or sync) drops the clash
 
 ### 4. People change or cancel their own bookings
 - [x] `/my/bookings` (signed-in): their requests and bookings, upcoming first, with status. Linked from the menu and from `/request`

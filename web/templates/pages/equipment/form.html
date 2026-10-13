@@ -1,0 +1,62 @@
+{{define "content"}}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/equipment">Equipment</a></nav>
+<div class="page-head"><div><h1>{{.Title}}</h1></div></div>
+<div class="card narrow">
+  {{template "errors" .Errors}}
+  {{if .Form.FromTracker}}
+  <dl class="facts">
+    <dt>Name</dt><dd>{{.Form.Name}}</dd>
+    <dt>Asked as</dt><dd>{{if .Form.Service}}Yes or no{{else}}How many{{if .Form.Total}} (there are {{.Form.Total}}){{end}}{{end}}</dd>
+    <dt>Offered with</dt><dd>{{if .RoomNames}}{{range $i, $n := .RoomNames}}{{if $i}}, {{end}}{{$n}}{{end}}{{else}}Not offered anywhere yet{{end}}</dd>
+    {{if .Form.Notes}}<dt>Notes</dt><dd>{{.Form.Notes}}</dd>{{end}}
+    {{if .Form.Archived}}<dt>Archived</dt><dd>Yes</dd>{{end}}
+  </dl>
+  <p class="hint">Set in the tracker{{with .TrackerURL}}: <a href="{{.}}" rel="noopener">see the product there</a>{{end}}.</p>
+  <div class="form__actions"><a class="btn btn--ghost" href="/equipment">Back</a></div>
+  {{else}}
+  <form method="post" action="{{if .Form.ID}}/equipment/{{.Form.ID}}{{else}}/equipment{{end}}" class="form">
+    {{template "csrf" .CSRF}}
+    <div class="field">
+      <label for="name">Name</label>
+      <input id="name" name="name" value="{{.Form.Name}}" required maxlength="100" {{if not .Form.ID}}autofocus{{end}}>
+    </div>
+    <fieldset class="fieldset">
+      <legend>How it's asked for</legend>
+      <label class="check"><input type="radio" name="mode" value="count" {{if not .Form.Service}}checked{{end}}> Ask how many</label>
+      <div class="field field--narrow">
+        <label for="total">Total <span class="optional">how many there are</span></label>
+        <input id="total" name="total" type="number" min="0" value="{{if .Form.Total}}{{.Form.Total}}{{end}}">
+      </div>
+      <label class="check"><input type="radio" name="mode" value="service" {{if .Form.Service}}checked{{end}}> Ask yes or no</label>
+      <p class="hint">For a service like sound or lighting: no total, it never runs out. Asking for more than the total is flagged to schedulers, never refused.</p>
+    </fieldset>
+    <fieldset class="fieldset">
+      <legend>Offered with</legend>
+      {{if .HasRooms}}
+      {{template "room-checks" (dict "Loose" .Loose "Groups" .Groups "Name" "room" "Picked" .Picked)}}
+      {{if not .Form.RoomIDs}}<p class="hint">Not offered anywhere yet: tick the rooms it can be asked for with.</p>{{end}}
+      <p class="hint">A building ticked on its own is for bookings of the whole building; it doesn't tick the rooms inside.</p>
+      {{else}}
+      <p class="hint">There are no bookable rooms yet.</p>
+      {{end}}
+    </fieldset>
+    <div class="field">
+      <label for="notes">Notes <span class="optional">optional</span></label>
+      <textarea id="notes" name="notes" rows="3">{{.Form.Notes}}</textarea>
+      <p class="hint">Shown on the request form.</p>
+    </div>
+    {{if .Form.ID}}
+    <fieldset class="fieldset">
+      <legend>Archive</legend>
+      <label class="check"><input type="checkbox" name="archived" value="1" {{if .Form.Archived}}checked{{end}}> Archived</label>
+      <p class="hint">Archived equipment stays on the bookings that used it but can't be asked for any more.</p>
+    </fieldset>
+    {{end}}
+    <div class="form__actions">
+      <button type="submit" class="btn btn--primary">{{if .Form.ID}}Save{{else}}Add equipment{{end}}</button>
+      <a class="btn btn--ghost" href="/equipment">Cancel</a>
+    </div>
+  </form>
+  {{end}}
+</div>
+{{end}}

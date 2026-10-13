@@ -105,8 +105,11 @@ func TestFamilyBusyBothWays(t *testing.T) {
 	main, nursery, kitchen = roomByName(t, st2, "Main building"), roomByName(t, st2, "Nursery"), roomByName(t, st2, "Kitchen")
 	whole := addBooking(t, st2, day, main.ID)
 	busy, _ = st2.BusyInRooms([]int64{nursery.ID, kitchen.ID}, "2026-11-07", "10:00", "", "11:00")
-	if len(busy[nursery.ID]) != 1 || len(busy[kitchen.ID]) != 1 || busy[nursery.ID][0].ID != whole {
-		t.Errorf("booking the building should make its rooms busy: %v", busy)
+	if len(busy[nursery.ID]) != 1 || busy[nursery.ID][0].ID != whole {
+		t.Errorf("booking the building should make its bookable rooms busy: %v", busy)
+	}
+	if len(busy[kitchen.ID]) != 0 {
+		t.Errorf("the kitchen isn't bookable, so the building booking leaves it free: %v", busy)
 	}
 	// Moving a booking leaves itself out.
 	if busy, _ := st2.BusyInRoomsExcept(whole, []int64{nursery.ID}, "2026-11-07", "", "", ""); len(busy) != 0 {
@@ -171,5 +174,81 @@ func TestHandMadeParent(t *testing.T) {
 	list, err := st.BusyInRoomsNamed([]string{"Stage"}, "2026-11-07", "2026-11-07")
 	if err != nil || len(list) != 1 {
 		t.Errorf("named = %v, %v", list, err)
+	}
+}
+
+// Only bookable rooms share busy time with their building (step 3a).
+func TestFamilyOnlyBookableRooms(t *testing.T) {
+	day := Booking{StartsOn: "2026-11-07"}
+
+	// A planner booking in the kitchen (not bookable) doesn't block the
+	// building, nor the building it.
+	st := openTest(t)
+	st.ImportRooms(treePlaces(), []int64{2, 4, 5})
+	main, kitchen := roomByName(t, st, "Main building"), roomByName(t, st, "Kitchen")
+	inKitchen := addBooking(t, st, day, kitchen.ID)
+	if busy, _ := st.BusyInRooms([]int64{main.ID}, "2026-11-07", "", "", ""); len(busy[main.ID]) != 0 {
+		t.Errorf("an unbookable room inside made the building busy: %v", busy)
+	}
+	whole := addBooking(t, st, day, main.ID)
+	if list, _ := st.Conflicts("2026-11-01", false); len(list) != 0 {
+		t.Errorf("building and unbookable room clashed: %+v", list)
+	}
+	// The room is still busy with its own bookings.
+	if busy, _ := st.BusyInRooms([]int64{kitchen.ID}, "2026-11-07", "", "", ""); len(busy[kitchen.ID]) != 1 || busy[kitchen.ID][0].ID != inKitchen {
+		t.Errorf("kitchen busy = %v", busy)
+	}
+
+	// Turning the kitchen bookable brings the clash; turning it off drops it.
+	k, _ := st.GetRoom(kitchen.ID)
+	k.Bookable = true
+	if err := st.UpdateRoom(k); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := st.Conflicts("2026-11-01", false); len(list) != 1 || list[0].A.ID != inKitchen || list[0].B.ID != whole {
+		t.Errorf("bookable kitchen should clash with the building: %+v", list)
+	}
+	k.Bookable = false
+	st.UpdateRoom(k)
+	if list, _ := st.Conflicts("2026-11-01", false); len(list) != 0 {
+		t.Errorf("turning bookable off should drop the clash: %+v", list)
+	}
+
+	// The same when the sync turns it off.
+	places := treePlaces()
+	places[4].Bookable = true
+	st.ImportRooms(places, nil)
+	if list, _ := st.Conflicts("2026-11-01", false); len(list) != 1 {
+		t.Errorf("synced bookable kitchen should clash: %+v", list)
+	}
+	places[4].Bookable = false
+	st.ImportRooms(places, nil)
+	if list, _ := st.Conflicts("2026-11-01", false); len(list) != 0 {
+		t.Errorf("synced unbookable kitchen should not clash: %+v", list)
+	}
+}
+
+// A bookable room in an area that isn't bookable still pairs with its
+// bookable building.
+func TestFamilyUnbookableMiddle(t *testing.T) {
+	st := openTest(t)
+	hall, err := st.CreateRoom(&Room{Name: "Life Center", Bookable: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	area, _ := st.CreateRoom(&Room{Name: "East wing", ParentID: hall})
+	stage, _ := st.CreateRoom(&Room{Name: "Stage", ParentID: area, Bookable: true})
+	day := Booking{StartsOn: "2026-11-07"}
+	inStage := addBooking(t, st, day, stage)
+	busy, _ := st.BusyInRooms([]int64{hall, area}, "2026-11-07", "", "", "")
+	if len(busy[hall]) != 1 || busy[hall][0].ID != inStage {
+		t.Errorf("the building should be busy with the stage: %v", busy)
+	}
+	if len(busy[area]) != 1 {
+		t.Errorf("the area is above the bookable stage, so it's busy too: %v", busy)
+	}
+	inArea := addBooking(t, st, day, area)
+	if busy, _ := st.BusyInRoomsExcept(inArea, []int64{hall}, "2026-11-07", "", "", ""); len(busy[hall]) != 1 || busy[hall][0].ID != inStage {
+		t.Errorf("a booking in the unbookable area shouldn't block the building: %v", busy)
 	}
 }

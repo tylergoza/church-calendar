@@ -10,7 +10,8 @@
   <ul class="pick-list card">
     {{range .Rows}}{{$q := .Request}}
     <li><span><a href="/request/{{$q.ID}}">{{$q.Title}}</a><br><span class="muted small">{{$q.When}} · {{$q.RoomNames}}</span>
-      {{if .TakenOver}}<br><span class="muted small">Now part of an event: <a href="/calendar/{{$q.BookingID}}">see it</a></span>{{end}}</span>
+      {{if .TakenOver}}<br><span class="muted small">Now part of an event: <a href="/calendar/{{$q.BookingID}}">see it</a></span>{{end}}
+      {{with .Booking}}{{template "my-equipment" (index $.Equip .ID)}}{{end}}</span>
       <span>
         {{template "request-status" $q.Status}}
         {{with .Booking}}{{if .NotYet}} <span class="badge badge--warn">{{bookingStatusLabel .Status}}</span>{{end}}{{end}}
@@ -24,7 +25,8 @@
   <h2 class="section__title">Bookings you added</h2>
   <ul class="pick-list card">
     {{range .Made}}
-    <li><span><a href="/calendar/{{.ID}}">{{.Title}}</a><br><span class="muted small">{{.When}} · {{.RoomNames}}</span></span>
+    <li><span><a href="/calendar/{{.ID}}">{{.Title}}</a><br><span class="muted small">{{.When}} · {{.RoomNames}}</span>
+      {{template "my-equipment" (index $.Equip .ID)}}</span>
       <span class="badge {{if .Cancelled}}badge--alert{{else if .NotYet}}badge--warn{{end}}">{{bookingStatusLabel .Status}}</span></li>
     {{end}}
   </ul>
@@ -34,3 +36,5 @@
 <div class="card narrow"><p class="muted">Nothing yet. <a href="/request">Book a room</a> and it shows up here.</p></div>
 {{end}}
 {{end}}
+
+{{define "my-equipment"}}{{if .}}<br><span class="muted small">Equipment: {{range $i, $l := .}}{{if $i}}, {{end}}{{if $l.Service}}{{$l.Name}}{{else}}{{$l.Quantity}} {{$l.Name}}{{end}}{{end}}</span>{{end}}{{end}}

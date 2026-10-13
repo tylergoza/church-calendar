@@ -62,5 +62,13 @@
   </div>
   <p class="hint">A place with the same name as a room you typed in takes that room over, with its bookings. Rooms here keep their own capacity, request settings and notes.</p>
 </form>
+<form method="post" action="/rooms/import/equipment" class="form">
+  {{template "csrf" .CSRF}}
+  <h2 class="section__title">Equipment</h2>
+  <p>{{if .Equipment}}{{pluralize .Equipment "piece"}} of equipment come{{if eq .Equipment 1}}s{{end}} from the tracker.{{else}}No equipment comes from the tracker yet.{{end}} Products set "On the church calendar" there are offered with the rooms they're set for; it's brought up to date every 15 minutes.</p>
+  <div class="form__actions">
+    <button type="submit" class="btn">Sync equipment now</button>
+  </div>
+</form>
 {{end}}
 {{end}}

@@ -49,6 +49,9 @@ type Request struct {
 	DecidedBy     int64  // 0 for one booked straight away
 	CreatedAt     string
 	Rooms         []BookingRoom
+	// Equipment is what it asks for. Saved with the request and copied to
+	// its booking; loaded with RequestEquipment, not by the list queries.
+	Equipment []EquipmentLine
 }
 
 // span is the request's times as a booking, for display and clash checks.
@@ -151,8 +154,8 @@ func (s *Store) RequestForBooking(bookingID int64) (int64, error) {
 	return id, err
 }
 
-// insertRequest saves a new request with the given status and its rooms,
-// and fills in its ID, code and status.
+// insertRequest saves a new request with the given status, its rooms and
+// equipment, and fills in its ID, code and status.
 func insertRequest(tx *sql.Tx, r *Request, status string, roomIDs []int64) error {
 	r.Code, r.Status = RandomToken(), status
 	res, err := tx.Exec(`INSERT INTO requests (code, name, contact, phone, user_id, title, starts_on, start_time, ends_on, end_time,
@@ -170,11 +173,11 @@ func insertRequest(tx *sql.Tx, r *Request, status string, roomIDs []int64) error
 			return err
 		}
 	}
-	return nil
+	return setRequestEquipment(tx, r.ID, r.Equipment)
 }
 
 // insertRequestBooking makes the booking (source "request", private) for
-// request r in its rooms and points the request at it.
+// request r in its rooms, with its equipment, and points the request at it.
 func insertRequestBooking(tx *sql.Tx, r *Request, status string, createdBy int64) error {
 	res, err := tx.Exec(`INSERT INTO bookings (source, title, starts_on, start_time, ends_on, end_time, visibility, status, created_by)
 		VALUES (?, ?, ?, ?, ?, ?, 'private', ?, ?)`, SourceRequest, r.Title, r.StartsOn, r.StartTime, r.EndsOn, r.EndTime, status, nullInt(createdBy))
@@ -186,6 +189,9 @@ func insertRequestBooking(tx *sql.Tx, r *Request, status string, createdBy int64
 	}
 	if _, err := tx.Exec(`INSERT INTO booking_rooms (booking_id, room_id, room_name)
 		SELECT ?, rm.id, rm.name FROM request_rooms rr JOIN rooms rm ON rm.id = rr.room_id WHERE rr.request_id = ?`, r.BookingID, r.ID); err != nil {
+		return err
+	}
+	if err := copyRequestEquipment(tx, r.ID, r.BookingID); err != nil {
 		return err
 	}
 	_, err = tx.Exec(`UPDATE requests SET booking_id = ? WHERE id = ?`, r.BookingID, r.ID)
@@ -214,6 +220,8 @@ func (s *Store) CreateRequest(r *Request, roomIDs []int64) error {
 // request is approved (by nobody) and its booking confirmed, made by the
 // member. If any room is busy then (pending and pencilled-in bookings
 // count) nothing is saved and the clashes come back with ErrRoomsBusy.
+// Equipment never stops it: a line over the total is saved and flagged
+// short when read.
 // The check runs inside the transaction, so two members can't take the
 // same slot at once.
 func (s *Store) BookRequest(r *Request, roomIDs []int64) (map[int64][]Booking, error) {

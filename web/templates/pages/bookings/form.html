@@ -3,7 +3,9 @@
 <div class="page-head"><div><h1>{{.Title}}</h1></div></div>
 <div class="card narrow">
   {{template "errors" .Errors}}
-  <form method="post" action="{{if .Form.ID}}/bookings/{{.Form.ID}}{{else}}/bookings{{end}}" class="form">
+  <form method="post" action="{{if .Form.ID}}/bookings/{{.Form.ID}}{{else}}/bookings{{end}}" class="form"
+        data-controller="availability" data-availability-url-value="/request/availability" data-availability-except-value="{{if .Form.ID}}{{.Form.ID}}{{else}}0{{end}}"
+        data-action="change->availability#check">
     {{template "csrf" .CSRF}}
     <div class="field">
       <label for="title">Title</label>
@@ -26,12 +28,12 @@
       </div>
     </div>
     <div class="field-row">
-      <div class="field"><label for="starts_on">Starts</label><input id="starts_on" name="starts_on" type="date" value="{{.Form.StartsOn}}" required></div>
-      <div class="field"><label for="start_time">At <span class="optional">blank for all day</span></label><input id="start_time" name="start_time" type="time" value="{{.Form.StartTime}}"></div>
+      <div class="field"><label for="starts_on">Starts</label><input id="starts_on" name="starts_on" type="date" value="{{.Form.StartsOn}}" required data-availability-target="field"></div>
+      <div class="field"><label for="start_time">At <span class="optional">blank for all day</span></label><input id="start_time" name="start_time" type="time" value="{{.Form.StartTime}}" data-availability-target="field"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label for="ends_on">Ends <span class="optional">if on a later day</span></label><input id="ends_on" name="ends_on" type="date" value="{{.Form.EndsOn}}"></div>
-      <div class="field"><label for="end_time">At <span class="optional">optional</span></label><input id="end_time" name="end_time" type="time" value="{{.Form.EndTime}}"></div>
+      <div class="field"><label for="ends_on">Ends <span class="optional">if on a later day</span></label><input id="ends_on" name="ends_on" type="date" value="{{.Form.EndsOn}}" data-availability-target="field"></div>
+      <div class="field"><label for="end_time">At <span class="optional">optional</span></label><input id="end_time" name="end_time" type="time" value="{{.Form.EndTime}}" data-availability-target="field"></div>
     </div>
     <p class="hint">With a start time but no end time, the rooms count as busy for the rest of the day.</p>
     <fieldset class="fieldset">
@@ -44,6 +46,7 @@
       <p class="hint">No rooms yet. {{if .User.CanSchedule}}<a href="/rooms/new">Add a room</a> first, or save this without one.{{end}}</p>
       {{end}}
     </fieldset>
+    {{template "equipment-fields" .Equip}}
     {{if .Form.SeriesID}}
     <fieldset class="fieldset">
       <legend>Apply changes to</legend>
