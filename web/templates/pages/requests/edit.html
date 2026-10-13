@@ -1,0 +1,52 @@
+{{define "content"}}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/request/{{.Form.ID}}">{{.Form.Title}}</a></nav>
+<div class="page-head"><div>
+  <h1>Change your booking</h1>
+  <p class="muted">When the rooms are free at the new times, the change is saved at once. If one is taken, nothing changes.</p>
+</div></div>
+<div class="card narrow">
+  {{template "errors" .Errors}}
+  <form method="post" action="/request/{{.Form.ID}}/edit" class="form">
+    {{template "csrf" .CSRF}}
+    <input type="hidden" name="name" value="{{.Form.Name}}">
+    <input type="hidden" name="phone" value="{{.Form.Phone}}">
+    <input type="hidden" name="contact" value="{{.Form.Contact}}">
+    <div class="field">
+      <label for="title">What's it for?</label>
+      <input id="title" name="title" value="{{.Form.Title}}" required maxlength="200">
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="starts_on">Day</label><input id="starts_on" name="starts_on" type="date" min="{{.Today}}" value="{{.Form.StartsOn}}" required></div>
+      <div class="field"><label for="start_time">From <span class="optional">blank for all day</span></label><input id="start_time" name="start_time" type="time" value="{{.Form.StartTime}}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="ends_on">Ends <span class="optional">if on a later day</span></label><input id="ends_on" name="ends_on" type="date" min="{{.Today}}" value="{{.Form.EndsOn}}"></div>
+      <div class="field"><label for="end_time">Until <span class="optional">optional</span></label><input id="end_time" name="end_time" type="time" value="{{.Form.EndTime}}"></div>
+    </div>
+    <fieldset class="fieldset">
+      <legend>Rooms</legend>
+      {{if .Rooms}}
+      <ul class="pick-list">
+        {{range .Rooms}}
+        <li><label class="check"><input type="checkbox" name="room" value="{{.ID}}" {{if index $.Picked .ID}}checked{{end}}> {{.Name}}{{if .Capacity}} <span class="muted small">up to {{.Capacity}}</span>{{end}}</label></li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="hint">There are no rooms to ask for.</p>
+      {{end}}
+    </fieldset>
+    <div class="field field--narrow">
+      <label for="expected_count">How many people? <span class="optional">optional</span></label>
+      <input id="expected_count" name="expected_count" type="number" min="0" inputmode="numeric" value="{{if .Form.ExpectedCount}}{{.Form.ExpectedCount}}{{end}}">
+    </div>
+    <div class="field">
+      <label for="details">Anything else? <span class="optional">optional</span></label>
+      <textarea id="details" name="details" rows="4" maxlength="4000">{{.Form.Details}}</textarea>
+    </div>
+    <div class="form__actions">
+      <button type="submit" class="btn btn--primary">Save</button>
+      <a class="btn btn--ghost" href="/request/{{.Form.ID}}">Back</a>
+    </div>
+  </form>
+</div>
+{{end}}

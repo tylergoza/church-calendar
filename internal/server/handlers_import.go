@@ -39,6 +39,24 @@ func (s *Server) trackerPlaces(ctx context.Context) ([]tracker.Place, error) {
 	return s.tracker().Places(ctx)
 }
 
+// trackerPlaceList is the tracker's places as the store imports them.
+func trackerPlaceList(places []tracker.Place) []store.TrackerPlace {
+	all := make([]store.TrackerPlace, 0, len(places))
+	for _, p := range places {
+		tp := store.TrackerPlace{ID: p.ID, Label: p.Label(), Name: p.Name, Path: p.Path, Kind: p.Kind}
+		if p.Bookable != nil {
+			tp.Bookable = *p.Bookable
+		} else {
+			tp.NoFlag = true
+		}
+		if p.ParentID != nil {
+			tp.ParentID = *p.ParentID
+		}
+		all = append(all, tp)
+	}
+	return all
+}
+
 func (s *Server) handleRoomImport(w http.ResponseWriter, r *http.Request) {
 	if !s.tracker().Configured() {
 		s.renderRoomImport(w, r, nil, nil, tracker.ErrNotConfigured)
@@ -117,10 +135,7 @@ func (s *Server) handleRoomImportRun(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/rooms/import", http.StatusSeeOther)
 		return
 	}
-	var all []store.TrackerPlace
-	for _, p := range places {
-		all = append(all, store.TrackerPlace{ID: p.ID, Label: p.Label(), Name: p.Name, Path: p.Path})
-	}
+	all := trackerPlaceList(places)
 	var pick []int64
 	for _, v := range r.PostForm["place"] {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil {

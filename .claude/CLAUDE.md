@@ -21,6 +21,11 @@ Ansible, calendar views) from `../event_planning`, the newest sibling.
   never holds notes, tasks, helpers, cast or needs.
 - Pushes from apps are never refused for conflicts: always 200 with a
   `conflicts` list. Conflicts are computed when read, not stored.
+- Booking status `pending` (a visitor's request waiting for a scheduler)
+  and `tentative` (pencilled in) block rooms exactly like `confirmed`;
+  only `cancelled` frees them. Members' requests are never pending: free
+  is booked, busy is refused. Busy checks and conflicts match a room's
+  family (the room, the buildings it's in, the rooms inside it).
 - Visibility rules must match the event planner's (public / private /
   locked = busy). Never show more than rooms and times for busy blocks.
 - Cookies `cal_*`, tokens `cal_…`; local port 8120 (tracker 8080, planner

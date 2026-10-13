@@ -147,6 +147,12 @@ func (s *Server) handleBookingShow(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data["Conflicts"] = clashes
+		if b.Cancelled() && b.CancelledBy != 0 {
+			if data["CancelledBy"], err = s.store.GetUser(b.CancelledBy); err != nil && !errors.Is(err, store.ErrNotFound) {
+				s.serverError(w, r, err)
+				return
+			}
+		}
 		if b.Source == store.SourceRequest {
 			if data["RequestID"], err = s.store.RequestForBooking(b.ID); err != nil {
 				s.serverError(w, r, err)

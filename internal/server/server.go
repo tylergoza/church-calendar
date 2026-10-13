@@ -126,7 +126,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.S
 
 func (s *Server) reloadSettings() {
 	s.siteName.Store(s.store.Setting("site_name", "Church Calendar"))
-	s.publicRequests.Store(s.store.Setting(publicRequestsSetting, "") == "1")
+	// Never saved: on (visitors may ask). An admin who saved "off" keeps it.
+	s.publicRequests.Store(s.store.Setting(publicRequestsSetting, "1") == "1")
 }
 
 func (s *Server) SiteName() string { return s.siteName.Load().(string) }
@@ -313,6 +314,17 @@ func (s *Server) funcs() template.FuncMap {
 		"pluralize":          pluralize,
 		"join":               strings.Join,
 		"lines":              func(t string) []string { return strings.Split(strings.TrimSpace(t), "\n") },
+		// tel: links aren't on html/template's safe list; the number is
+		// only ever digits and a leading + here.
+		"telURL": func(phone string) template.URL {
+			if d := phoneDigits(phone); d != "" {
+				if strings.HasPrefix(strings.TrimSpace(phone), "+") {
+					d = "+" + d
+				}
+				return template.URL("tel:" + d)
+			}
+			return ""
+		},
 	}
 }
 

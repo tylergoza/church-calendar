@@ -5,7 +5,7 @@
   <div>
     {{if .CanSee}}
       <h1>{{$b.Title}} {{if .User}}{{template "visibility-badge" $b.Visibility}}{{end}}
-        {{if eq $b.Status "tentative"}}<span class="badge badge--warn">Tentative</span>{{end}}
+        {{if eq $b.Status "pending"}}<span class="badge badge--warn">Pending</span>{{else if eq $b.Status "tentative"}}<span class="badge badge--warn">Pencilled in</span>{{end}}
         {{if eq $b.Status "cancelled"}}<span class="badge badge--alert">Cancelled</span>{{end}}</h1>
       {{with $b.Kind}}<p class="muted">{{.}}</p>{{end}}
     {{else}}
@@ -26,6 +26,21 @@
   {{if .CanSee}}{{with $b.Description}}<p>{{range lines .}}{{.}}<br>{{end}}</p>{{end}}{{end}}
   {{if and .User .CanSee (not $b.HandMade)}}<p class="hint">This booking comes from the {{.Source}}, so it's changed there.</p>{{end}}
 </div>
+{{if and .User.CanSchedule $b.Cancelled}}
+<div class="card">
+  <h2 class="section__title">Cancelled</h2>
+  <p class="muted small">{{if .CancelledBy}}Cancelled by {{.CancelledBy.Name}}.{{else}}Cancelled.{{end}} It's off the calendar and its rooms are free.</p>
+  {{with $b.CancelNote}}<div class="notes"><p class="muted small">Note to the person:</p>{{range lines .}}<p>{{.}}</p>{{end}}</div>{{end}}
+</div>
+{{else if and .User.CanSchedule $b.HandMade}}
+<div class="card danger-zone">
+  {{template "cancel-booking" (dict "B" $b "CSRF" .CSRF)}}
+</div>
+{{else if and .User.CanSchedule (not $b.Cancelled)}}
+<div class="card">
+  {{template "cancel-elsewhere" (dict "B" $b "Source" .Source)}}
+</div>
+{{end}}
 {{if .Conflicts}}
 <div class="card card--alert">
   <h2 class="section__title">Clashes</h2>

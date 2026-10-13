@@ -58,7 +58,13 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /request/availability", s.handleRequestAvailability)
 	mux.HandleFunc("GET /request/{id}", s.handleRequestStatus)
 	mux.HandleFunc("POST /request/{id}/withdraw", s.handleRequestWithdraw)
+	// Only the signed-in member who asked may change or cancel (the
+	// handlers check; the status link's code isn't enough).
+	mux.HandleFunc("GET /request/{id}/edit", s.handleRequestEdit)
+	mux.HandleFunc("POST /request/{id}/edit", s.handleRequestUpdate)
+	mux.HandleFunc("POST /request/{id}/cancel", s.handleRequestCancel)
 
+	auth("GET /my/bookings", s.handleMyBookings)
 	auth("GET /account", s.handleAccount)
 	auth("POST /account/password", s.handleAccountPassword)
 	auth("GET /rooms", s.handleRooms)
@@ -78,6 +84,7 @@ func (s *Server) routes() http.Handler {
 	sched("POST /bookings/{id}", s.handleBookingUpdate)
 	sched("POST /bookings/{id}/delete", s.handleBookingDelete)
 	sched("POST /bookings/{id}/end-series", s.handleBookingEndSeries)
+	sched("POST /bookings/{id}/cancel", s.handleBookingCancel)
 	sched("GET /requests", s.handleRequests)
 	sched("GET /requests/{id}", s.handleRequestShow)
 	sched("POST /requests/{id}/approve", s.handleRequestApprove)

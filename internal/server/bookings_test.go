@@ -41,7 +41,7 @@ func TestRoomPages(t *testing.T) {
 		t.Error("expected a capacity error")
 	}
 	rooms, _ := st.ListRooms(true)
-	if len(rooms) != 1 || rooms[0].Capacity != 200 || !rooms[0].Bookable || rooms[0].NeedsApproval {
+	if len(rooms) != 1 || rooms[0].Capacity != 200 || !rooms[0].Bookable {
 		t.Fatalf("rooms = %+v", rooms)
 	}
 	id := itoa(rooms[0].ID)

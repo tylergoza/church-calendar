@@ -10,7 +10,7 @@ import (
 
 func addRoom(t *testing.T, st *Store, name string) int64 {
 	t.Helper()
-	id, err := st.CreateRoom(&Room{Name: name, Bookable: true, NeedsApproval: true})
+	id, err := st.CreateRoom(&Room{Name: name, Bookable: true})
 	if err != nil {
 		t.Fatal(err)
 	}

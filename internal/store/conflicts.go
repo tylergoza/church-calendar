@@ -19,8 +19,24 @@ const spansSQL = `spans AS (
 		END AS e
 	FROM bookings WHERE status <> 'cancelled')`
 
-// Conflict is two bookings that overlap in the same room. A has the lower
-// ID. OK is set when a scheduler marked the pair "that's fine".
+// familySQL gives room_family(room_id, related_id): each room related to
+// itself, its ancestors and its descendants, following rooms.parent_id.
+// Booking a building takes the rooms in it too, and the other way round,
+// but two rooms in one building are not related. It is a recursive CTE, so
+// start the query with WITH RECURSIVE and put spansSQL after it with a
+// comma. up is each room with the rooms above it; the family is up both
+// ways. UNION (not UNION ALL) keeps a loop in parent_id from running on.
+const familySQL = `up(room_id, related_id) AS (
+	SELECT id, id FROM rooms
+	UNION
+	SELECT up.room_id, r.parent_id FROM up JOIN rooms r ON r.id = up.related_id WHERE r.parent_id IS NOT NULL),
+room_family(room_id, related_id) AS (
+	SELECT room_id, related_id FROM up
+	UNION
+	SELECT related_id, room_id FROM up)`
+
+// Conflict is two bookings that overlap in the same room, or in rooms one
+// inside the other (Room is the inner one then). A has the lower ID. OK is set when a scheduler marked the pair "that's fine".
 type Conflict struct {
 	Room BookingRoom
 	A, B Booking
@@ -28,14 +44,18 @@ type Conflict struct {
 }
 
 // conflicts finds overlapping pairs in known rooms (bookings by name only
-// aren't checked), filtered by where, which can use a and b (the spans:
+// aren't checked), counting a building and the rooms in it as the same
+// place, and listing each pair once. Filtered by where, which can use a and b (the spans:
 // id, s, e) and ok (conflict_ok). Ordered by room, then start.
 func (s *Store) conflicts(where string, args ...any) ([]Conflict, error) {
-	rows, err := s.DB.Query(`WITH `+spansSQL+`
+	rows, err := s.DB.Query(`WITH RECURSIVE `+familySQL+`, `+spansSQL+`
 		SELECT DISTINCT r.id, r.name, a.id, b.id, ok.low_id IS NOT NULL, min(a.s, b.s) AS first
 		FROM booking_rooms ra
-		JOIN booking_rooms rb ON rb.room_id = ra.room_id AND rb.booking_id > ra.booking_id
-		JOIN rooms r ON r.id = ra.room_id
+		JOIN room_family f ON f.room_id = ra.room_id
+		JOIN booking_rooms rb ON rb.room_id = f.related_id AND rb.booking_id > ra.booking_id
+		JOIN rooms r ON r.id = CASE WHEN ra.room_id = rb.room_id
+			OR EXISTS (SELECT 1 FROM up WHERE up.room_id = ra.room_id AND up.related_id = rb.room_id)
+			THEN ra.room_id ELSE rb.room_id END
 		JOIN spans a ON a.id = ra.booking_id
 		JOIN spans b ON b.id = rb.booking_id
 		LEFT JOIN conflict_ok ok ON ok.low_id = a.id AND ok.high_id = b.id
@@ -46,6 +66,7 @@ func (s *Store) conflicts(where string, args ...any) ([]Conflict, error) {
 	}
 	var out []Conflict
 	var pairs [][2]int64
+	done := map[[2]int64]bool{}
 	for rows.Next() {
 		var c Conflict
 		var pair [2]int64
@@ -54,6 +75,10 @@ func (s *Store) conflicts(where string, args ...any) ([]Conflict, error) {
 			rows.Close()
 			return nil, err
 		}
+		if done[pair] {
+			continue // already listed under another room
+		}
+		done[pair] = true
 		out = append(out, c)
 		pairs = append(pairs, pair)
 	}

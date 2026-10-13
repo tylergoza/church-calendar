@@ -12,11 +12,13 @@ const (
 	SourceRequest  = "request"  // an approved room request
 )
 
-// Booking statuses.
-var BookingStatuses = []string{"confirmed", "tentative", "cancelled"}
+// Booking statuses. pending is a visitor's request waiting for a
+// scheduler; tentative is a date pencilled in. Both block their rooms like
+// confirmed ones. Only cancelled frees them.
+var BookingStatuses = []string{"confirmed", "tentative", "pending", "cancelled"}
 
 var bookingStatusLabels = map[string]string{
-	"confirmed": "Confirmed", "tentative": "Tentative", "cancelled": "Cancelled",
+	"confirmed": "Confirmed", "tentative": "Pencilled in", "pending": "Pending", "cancelled": "Cancelled",
 }
 
 func BookingStatusLabel(s string) string { return bookingStatusLabels[s] }
@@ -70,8 +72,17 @@ type Booking struct {
 	CreatedBy      int64
 	CreatedAt      string
 	UpdatedAt      string
+	CancelNote     string // to the person, when a scheduler cancelled it
+	CancelledBy    int64
 	Rooms          []BookingRoom
 }
+
+// NotYet reports whether the booking is pending or pencilled in: it blocks
+// its rooms, but isn't certain yet.
+func (b Booking) NotYet() bool { return b.Status == "pending" || b.Status == "tentative" }
+
+// Cancelled reports whether the booking was cancelled (kept, off the calendar).
+func (b Booking) Cancelled() bool { return b.Status == "cancelled" }
 
 // HandMade reports whether the booking belongs to this app (so it can be
 // edited here) rather than to an app that pushed it.
@@ -155,12 +166,14 @@ func (b Booking) ShortWhen() string {
 }
 
 const bookingCols = `id, source, COALESCE(source_id, ''), COALESCE(series_id, 0), occurrence_date, title, kind,
-	starts_on, start_time, ends_on, end_time, visibility, description, url, status, COALESCE(created_by, 0), created_at, updated_at`
+	starts_on, start_time, ends_on, end_time, visibility, description, url, status, COALESCE(created_by, 0), created_at, updated_at,
+	cancel_note, COALESCE(cancelled_by, 0)`
 
 func scanBooking(sc interface{ Scan(...any) error }) (Booking, error) {
 	var b Booking
 	err := sc.Scan(&b.ID, &b.Source, &b.SourceID, &b.SeriesID, &b.OccurrenceDate, &b.Title, &b.Kind,
-		&b.StartsOn, &b.StartTime, &b.EndsOn, &b.EndTime, &b.Visibility, &b.Description, &b.URL, &b.Status, &b.CreatedBy, &b.CreatedAt, &b.UpdatedAt)
+		&b.StartsOn, &b.StartTime, &b.EndsOn, &b.EndTime, &b.Visibility, &b.Description, &b.URL, &b.Status, &b.CreatedBy, &b.CreatedAt, &b.UpdatedAt,
+		&b.CancelNote, &b.CancelledBy)
 	return b, err
 }
 

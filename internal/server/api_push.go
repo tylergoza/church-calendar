@@ -344,13 +344,12 @@ func (s *Server) apiAvailability(w http.ResponseWriter, r *http.Request, tok *st
 }
 
 type apiRoomJSON struct {
-	ID            int64  `json:"id"`
-	Name          string `json:"name"`
-	PlaceID       int64  `json:"place_id,omitempty"`
-	Path          string `json:"path,omitempty"`
-	Capacity      int    `json:"capacity,omitempty"`
-	Bookable      bool   `json:"bookable"`
-	NeedsApproval bool   `json:"needs_approval"`
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	PlaceID  int64  `json:"place_id,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Capacity int    `json:"capacity,omitempty"`
+	Bookable bool   `json:"bookable"`
 }
 
 // apiRooms lists the calendar's rooms (not archived), with the tracker's
@@ -365,7 +364,7 @@ func (s *Server) apiRooms(w http.ResponseWriter, r *http.Request, tok *store.Tok
 	out := make([]apiRoomJSON, len(list))
 	for i, rm := range list {
 		out[i] = apiRoomJSON{ID: rm.ID, Name: rm.Name, PlaceID: rm.PlaceID, Path: rm.TrackerPath, Capacity: rm.Capacity,
-			Bookable: rm.Bookable, NeedsApproval: rm.NeedsApproval}
+			Bookable: rm.Bookable}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rooms": out})
 }

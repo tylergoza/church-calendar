@@ -10,9 +10,11 @@
     {{with .Added}}<li>Added: {{join . ", "}}.</li>{{end}}
     {{with .Linked}}<li>Rooms you'd typed in that now follow the tracker: {{join . ", "}}.</li>{{end}}
     {{with .Renamed}}<li>Brought up to date: {{join . ", "}}.</li>{{end}}
+    {{with .Moved}}<li>Moved or changed kind: {{join . ", "}}.</li>{{end}}
+    {{with .Flagged}}<li>{{join . ", "}}.</li>{{end}}
     {{with .Archived}}<li>Archived, as they're gone from the tracker: {{join . ", "}}.</li>{{end}}
     {{with .Bookings}}<li>{{pluralize . "booking room"}} sent by name now linked to a room, so they're checked for conflicts.</li>{{end}}
-    {{if not (or .Added .Linked .Renamed .Archived .Bookings)}}<li>Everything was already up to date.</li>{{end}}
+    {{if not (or .Added .Linked .Renamed .Moved .Flagged .Archived .Bookings)}}<li>Everything was already up to date.</li>{{end}}
   </ul>
   {{with .Skipped}}<div class="alert alert--error" role="alert"><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
 </div>

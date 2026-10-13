@@ -16,10 +16,24 @@
     </div>
     <fieldset class="fieldset">
       <legend>Room requests</legend>
+      {{if .Form.FromTracker}}
+      <label class="check"><input type="checkbox" value="1" disabled {{if .Form.Bookable}}checked{{end}}> Offer it on the request form</label>
+      <p class="hint">Set in the tracker{{with .TrackerURL}}: <a href="{{.}}" rel="noopener">see the place there</a>{{end}}.</p>
+      {{else}}
       <label class="check"><input type="checkbox" name="bookable" value="1" {{if .Form.Bookable}}checked{{end}}> Offer it on the request form</label>
-      <label class="check"><input type="checkbox" name="needs_approval" value="1" {{if .Form.NeedsApproval}}checked{{end}}> Requests wait for a scheduler to approve them</label>
-      <p class="hint">Without approval, members who ask for it get it straight away when it's free.</p>
+      {{end}}
+      <p class="hint">Signed-in members get it straight away when it's free. Visitors' requests wait for a scheduler.</p>
     </fieldset>
+    {{if not .Form.FromTracker}}
+    <div class="field">
+      <label for="parent">Inside <span class="optional">optional</span></label>
+      <select id="parent" name="parent">
+        <option value="">Not inside another room</option>
+        {{range .Parents}}<option value="{{.ID}}" {{if eq .ID $.Form.ParentID}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+      <p class="hint">Booking a building also takes the rooms inside it, and the other way round.</p>
+    </div>
+    {{end}}
     <div class="field">
       <label for="notes">Notes <span class="optional">optional</span></label>
       <textarea id="notes" name="notes" rows="3">{{.Form.Notes}}</textarea>
