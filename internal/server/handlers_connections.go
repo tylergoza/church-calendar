@@ -20,8 +20,20 @@ import (
 
 // connectionDefs are the calendar's links to other apps. Each is optional:
 // when it's off, the app behaves as if the other app doesn't exist. Single
-// sign-on joins this list with its Test sign-in step (PLAN.md step 7).
+// sign-on saves as pending and has its own handlers
+// (handlers_sso_pending.go).
 var connectionDefs = []connections.Def{
+	{
+		ID: "sso", Name: "Single sign-on",
+		Help: "People sign in with their church account in User Management instead of a password here. In User Management an admin registers this app on its Apps page and gets a client ID and secret. Saving here only stores the values as pending: sign-in doesn't change until a test sign-in as an admin of this app works.",
+		Fields: []connections.Field{
+			{Key: "sso_url", Env: "SSO_URL", Label: "User Management address", Hint: "https://accounts.example.org", URL: true, Required: true},
+			{Key: "sso_internal_url", Env: "SSO_INTERNAL_URL", Label: "Internal address", Hint: "Optional, e.g. http://127.0.0.1:8100", URL: true},
+			{Key: "sso_client_id", Env: "SSO_CLIENT_ID", Label: "Client ID", Hint: "calendar", Required: true},
+			{Key: "sso_client_secret", Env: "SSO_CLIENT_SECRET", Label: "Client secret", Secret: true, Required: true},
+			{Key: "base_url", Env: "BASE_URL", Label: "This app's address", Hint: "https://calendar.example.org (the sign-in comes back here)", URL: true},
+		},
+	},
 	{
 		ID: "tracker", Name: "Maintenance tracker",
 		Help: `Import rooms from the tracker's places. In the tracker, an admin opens API, makes a token for "Calendar", and pastes it here.`,
@@ -79,11 +91,15 @@ type connView struct {
 	ChangedBy string
 	ChangedAt string
 	CanTest   bool
+	// Single sign-on only: it saves as pending; Pending is set while
+	// values wait for a test sign-in (the boxes show them then).
+	IsSSO   bool
+	Pending bool
 }
 
 func (s *Server) connectionView(d connections.Def, form url.Values) connView {
 	r := connections.Resolve(d, s.cfg.Env, s.store)
-	v := connView{Resolved: r, CanTest: connectionChecks[d.ID] != nil}
+	v := connView{Resolved: r, CanTest: connectionChecks[d.ID] != nil || d.ID == "sso", IsSSO: d.ID == "sso"}
 	if who, when, ok := strings.Cut(s.store.Setting(changedKey(d.ID), ""), "|"); ok {
 		v.ChangedBy, v.ChangedAt = who, when
 	}
@@ -92,6 +108,11 @@ func (s *Server) connectionView(d connections.Def, form url.Values) connView {
 		vals := r.Saved
 		if r.FromEnv {
 			vals = r.FromServer
+		}
+		if v.IsSSO && !r.FromEnv {
+			if pv, ok := s.pendingSSO(); ok {
+				v.Pending, vals = true, pv.Values
+			}
 		}
 		if f.Secret {
 			cf.Set = vals[f.Key] != ""
@@ -139,6 +160,10 @@ func (s *Server) connectionFor(w http.ResponseWriter, r *http.Request) (connecti
 func (s *Server) handleConnectionSave(w http.ResponseWriter, r *http.Request) {
 	d, ok := s.connectionFor(w, r)
 	if !ok {
+		return
+	}
+	if d.ID == "sso" {
+		s.handleSSOSave(w, r)
 		return
 	}
 	if connections.Resolve(d, s.cfg.Env, s.store).FromEnv {
@@ -240,6 +265,10 @@ func (s *Server) handleConnectionClear(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if d.ID == "sso" {
+		s.handleSSOOff(w, r)
+		return
+	}
 	if err := ClearConnection(s.store, d.ID); err != nil {
 		s.serverError(w, r, err)
 		return
@@ -255,6 +284,10 @@ func (s *Server) handleConnectionClear(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleConnectionTest(w http.ResponseWriter, r *http.Request) {
 	d, ok := s.connectionFor(w, r)
 	if !ok {
+		return
+	}
+	if d.ID == "sso" {
+		s.handleSSOCheck(w, r)
 		return
 	}
 	s.redirectAfterConnectionChange(w, r, d, "")
@@ -288,11 +321,17 @@ func (s *Server) redirectAfterConnectionChange(w http.ResponseWriter, r *http.Re
 }
 
 // noteConnectionChange records who changed a connection and logs it. Only
-// field names are logged, never values.
+// field names are logged, never values. Sign-in is rebuilt from the
+// settings, in case it was single sign-on that changed.
 func (s *Server) noteConnectionChange(r *http.Request, id, action string, fields []string) {
 	u := currentUser(r)
 	s.store.SetSetting(changedKey(id), u.Username+"|"+time.Now().UTC().Format("2006-01-02 15:04:05"))
 	s.log.Info("connection changed", "user", u.Username, "connection", id, "action", action, "fields", strings.Join(fields, ","))
+	if id == "sso" {
+		if err := s.reloadSSO(); err != nil {
+			s.log.Error("single sign-on reload", "err", err)
+		}
+	}
 }
 
 // ClearConnection removes a connection's saved settings. It's also the
@@ -307,6 +346,9 @@ func ClearConnection(st *store.Store, id string) error {
 		if err := st.SetSetting(f.Key, ""); err != nil {
 			return err
 		}
+	}
+	if id == "sso" {
+		return clearPendingSSO(st)
 	}
 	return nil
 }

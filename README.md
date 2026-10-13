@@ -46,6 +46,10 @@ Each role includes the ones before it.
 
 Visitors (not signed in) see the public calendar.
 
+With single sign-on the role comes from User Management: `admin`,
+`scheduler` or `member` (anything else counts as member). Local login: the
+Users page has a role select, and `create-user` takes `--role`.
+
 ## Room requests
 
 Anyone signed in can **Ask for a room** at `/request`; each room shows
@@ -119,10 +123,9 @@ behaves as if that app doesn't exist.
 
 | Connection | Environment override | What it turns on |
 |------------|----------------------|------------------|
+| Single sign-on | `SSO_URL`, `SSO_INTERNAL_URL`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `BASE_URL` | Signing in through User Management (see [Single sign-on](#single-sign-on)); off = local login |
 | Maintenance tracker | `TRACKER_URL`, `TRACKER_TOKEN` | Importing rooms from the tracker's places |
 | Event planner | `EVENTS_URL` (address only) | **Make this an event** on bookings and requests |
-
-Single sign-on joins this list when it's built (`PLAN.md` step 7).
 
 **Importing rooms.** With the tracker connected, schedulers get **Import
 from tracker** on `/rooms`. Pick the buildings, rooms and areas people
@@ -157,13 +160,67 @@ Handing a connection over from the server to the app:
    disconnected.
 
 If a bad saved setting is the problem, `church-calendar connection clear
-tracker|events` removes it from the command line.
+sso|tracker|events` removes it from the command line.
+
+## Single sign-on
+
+With single sign-on on, people sign in with their church account in User
+Management (the `user_management` repo; client ID `calendar`) instead of a
+password here:
+
+1. `/login` sends the browser to User Management's `/authorize`
+   (authorization code + PKCE). The state and PKCE verifier wait in a
+   10-minute `cal_sso` cookie.
+2. User Management sends it back to `/auth/callback` with a code. The app
+   checks the state, swaps the code for a grant (server to server), and
+   adds or updates the person's local user row by their User Management ID.
+   An existing local user with the same username is linked, so their
+   bookings and requests stay theirs.
+3. Every 5 minutes at most, a session's grant is checked again, which picks
+   up name and role changes. If User Management says the sign-in has
+   ended (signed out, turned off, access removed), the session ends here
+   too. If it can't be reached, sessions keep working for an hour past
+   their last good check, so restarting it signs no one out.
+4. Signing out here also signs out of User Management, and so of the
+   other apps within 5 minutes.
+
+**Setting it up on the Connections page.** A wrong setting could lock every
+admin out, so saving never switches it on:
+
+1. Admin › Connections › Single sign-on: fill in the User Management
+   address, optional internal address, client ID, client secret and this
+   app's address, and **Save**. The values are stored as *pending* (the
+   secret encrypted) and sign-in doesn't change. A blank secret keeps the
+   current one.
+2. Press **Test sign-in**. The app checks the client ID and secret with
+   User Management server to server, then sends you through User
+   Management and back. Only if that works **and** you come back as an
+   `admin` of this app does the pending set become live. Otherwise the page
+   says why, the old setting stays and the pending values wait. You stay
+   signed in here either way. **Discard** drops the pending values.
+3. **Turn off single sign-on** (after a confirm) goes back to local
+   passwords. Anyone who only ever signed in through User Management has
+   none; set one with `church-calendar reset-password USERNAME`.
+4. Values set in the environment are shown read-only; **Keep in settings**
+   copies them over, as for the other connections.
+
+Break-glass: `church-calendar local-login on` brings the password form
+back, and `church-calendar connection clear sso` removes the saved
+settings, pending ones included. A broken saved setting falls back to local
+login with a banner for admins; broken environment values stop the app at
+start.
+
+With single sign-on on, `/setup` is gone, `/account` links to User
+Management's account page, and **Users** lists everyone with access from
+User Management: admins change roles and suspend people there (adding,
+renaming and passwords are for a user admin in User Management).
 
 ## Commands
 
 ```sh
 church-calendar create-user alice [--role member|scheduler|admin]  # default member; --admin is --role admin; prompts for a password (10+ characters)
 church-calendar reset-password alice          # and turns their account back on
+church-calendar local-login on|off            # break-glass: password sign-in even with single sign-on on
 church-calendar connection clear tracker      # forget a connection's saved settings
 church-calendar backup /path/backup.db        # safe while the app is running
 ```

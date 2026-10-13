@@ -5,7 +5,7 @@ event, rehearsal, meeting and room booking on one calendar, with room
 conflicts caught across all the apps. People (inside or outside the church)
 can also ask for a room here.
 
-Status: step 6 (tracker import) built (2026-10-13).
+Status: step 7 (single sign-on) built (2026-10-13); registering in User Management is the user's, with the deploy.
 
 ## The idea in one paragraph
 
@@ -348,9 +348,9 @@ Each step is a working app; stop after any of them.
 - [x] Tests: tracker client, import/re-import/rename/archive/name clashes in the store, the import page, the connection Test
 
 ### 7. Single sign-on
-- [ ] Copy `internal/sso` from the event planner; `RoleFromSSO` maps `member`/`scheduler`/`admin`
-- [ ] **Single sign-on** connection section with pending values and **Test sign-in**
-- [ ] Register in User Management (see `../user_management/CALENDAR_PLAN.md`)
+- [x] Copy `internal/sso` from the event planner; `RoleFromSSO` maps `member`/`scheduler`/`admin`. With it: `/auth/start`, `/auth/callback`, `/signed-out`, grant checks every 5 minutes (an hour's grace when User Management is down), sign-out there too, `/setup` off, **Users** read from User Management (role change, suspend), `local-login on|off` break-glass command, form-action CSP for the SSO origin. The configured `BASE_URL` now also makes the feed and API links
+- [x] **Single sign-on** connection section with pending values and **Test sign-in** (only goes live for an admin of this app), **Discard**, **Turn off single sign-on** (the section's Disconnect), `connection clear sso` clears pending too. A broken saved setting falls back to local login with an admin banner; broken environment values stop the app at start. Tests ported from the event planner
+- [ ] Register in User Management (see `../user_management/CALENDAR_PLAN.md`; the repo side there is done, what's left is the user's: `with-um` in `~/.zshrc`, `register-app APP=calendar` or the Apps page, access)
 
 ### 8. Deploy
 - [ ] `deploy/ansible` copied from the event planner: service `church-calendar`, user `calendar`, `/var/lib/church-calendar`, Caddy site file, `calendar.<dns_zone>`

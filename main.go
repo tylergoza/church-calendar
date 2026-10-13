@@ -4,6 +4,7 @@
 //	church-calendar create-user NAME [--role member|scheduler|admin | --admin]
 //	                                      create a user (prompts for password)
 //	church-calendar reset-password NAME   set a new password for a user
+//	church-calendar local-login on|off    break-glass: password sign-in even with single sign-on on
 //	church-calendar connection clear ID   break-glass: forget a connection's saved settings
 //	church-calendar backup FILE           write a consistent copy of the database
 //
@@ -138,6 +139,7 @@ func main() {
 var commandUsage = map[string]string{
 	"create-user":    "create-user USERNAME [--role member|scheduler|admin] [--admin]",
 	"reset-password": "reset-password USERNAME",
+	"local-login":    "local-login on|off",
 	"connection":     "connection clear " + strings.Join(server.ConnectionIDs(), "|"),
 	"backup":         "backup DEST_FILE",
 }
@@ -150,7 +152,7 @@ func checkCommand(args []string) error {
 	}
 	usage, ok := commandUsage[args[0]]
 	if !ok {
-		return fmt.Errorf("unknown command %q (commands: create-user, reset-password, connection, backup)", args[0])
+		return fmt.Errorf("unknown command %q (commands: create-user, reset-password, local-login, connection, backup)", args[0])
 	}
 	rest := args[1:]
 	if args[0] == "create-user" {
@@ -161,6 +163,9 @@ func checkCommand(args []string) error {
 		}
 	}
 	if len(rest) < 1 {
+		return errors.New("usage: " + usage)
+	}
+	if args[0] == "local-login" && rest[0] != "on" && rest[0] != "off" {
 		return errors.New("usage: " + usage)
 	}
 	if args[0] == "connection" && (len(rest) != 2 || rest[0] != "clear" || !slices.Contains(server.ConnectionIDs(), rest[1])) {
@@ -212,6 +217,19 @@ func runCommand(st *store.Store, args []string) error {
 			return err
 		}
 		fmt.Printf("Password updated for %q (and their account is active here)\n", args[1])
+	case "local-login":
+		// Break-glass for when User Management is down: brings the
+		// password form back on /login. Users who came from single
+		// sign-on have no password here; give one with reset-password.
+		if err := st.SetSetting("local_login", args[1]); err != nil {
+			return err
+		}
+		if args[1] == "on" {
+			fmt.Println("Local login is on: /login shows the password form, even with single sign-on on.")
+			fmt.Println("Set a password with reset-password USERNAME if needed. Turn it off again with local-login off.")
+		} else {
+			fmt.Println("Local login is off: with single sign-on on, /login goes to User Management.")
+		}
 	case "connection":
 		// Break-glass for when a bad saved setting is the problem: the
 		// connection goes back to the environment, or off.
@@ -219,6 +237,9 @@ func runCommand(st *store.Store, args []string) error {
 			return err
 		}
 		fmt.Printf("Saved settings for the %s connection removed. It goes back to the server's values, or off.\n", args[2])
+		if args[2] == "sso" {
+			fmt.Println("Sign-in falls back to local passwords unless SSO_URL is set on the server; use reset-password if needed.")
+		}
 	case "backup":
 		if _, err := os.Stat(args[1]); err == nil {
 			return fmt.Errorf("%s already exists", args[1])
@@ -228,7 +249,7 @@ func runCommand(st *store.Store, args []string) error {
 		}
 		fmt.Println("Backup written to", args[1])
 	default:
-		return fmt.Errorf("unknown command %q (commands: create-user, reset-password, connection, backup)", args[0])
+		return fmt.Errorf("unknown command %q (commands: create-user, reset-password, local-login, connection, backup)", args[0])
 	}
 	return nil
 }

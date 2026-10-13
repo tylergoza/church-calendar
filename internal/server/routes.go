@@ -35,6 +35,11 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /logout", s.handleLogout)
 	mux.HandleFunc("GET /setup", s.handleSetupForm)
 	mux.HandleFunc("POST /setup", s.handleSetup)
+	mux.HandleFunc("GET /signed-out", s.handleSignedOut)
+	// Single sign-on (404 unless it's connected). /auth/start goes to User
+	// Management even while the break-glass local login is on.
+	mux.HandleFunc("GET /auth/start", s.handleSSOStart)
+	mux.HandleFunc("GET /auth/callback", s.handleSSOCallback)
 
 	// Signed-in members.
 	auth := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.requireUser(h)) }
@@ -91,7 +96,13 @@ func (s *Server) routes() http.Handler {
 	admin("GET /admin/settings", s.handleSettings)
 	admin("POST /admin/settings", s.handleSettingsUpdate)
 	admin("GET /admin/backup", s.handleBackup)
+	admin("POST /admin/access/{sub}", s.handleSSOAccessUpdate) // SSO only
 	admin("GET /admin/connections", s.handleConnections)
+	// Single sign-on saves as pending and goes live only after a test
+	// sign-in (handlers_sso_pending.go); save, test and clear on
+	// /admin/connections/sso are sent there too.
+	admin("POST /admin/connections/sso/signin-test", s.handleSSOTestSignIn)
+	admin("POST /admin/connections/sso/discard", s.handleSSODiscard)
 	admin("POST /admin/connections/{id}", s.handleConnectionSave)
 	admin("POST /admin/connections/{id}/test", s.handleConnectionTest)
 	admin("POST /admin/connections/{id}/keep", s.handleConnectionKeep)
@@ -169,7 +180,7 @@ func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter 
 func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		h.Set("Content-Security-Policy", s.csp)
+		h.Set("Content-Security-Policy", s.contentSecurityPolicy(r))
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
@@ -192,7 +203,9 @@ func (s *Server) loadSession(next http.Handler) http.Handler {
 			sess, err := s.store.GetSession(c.Value)
 			var user *store.User
 			if err == nil {
-				user = &sess.User
+				// SSO sessions are re-checked with User Management every
+				// few minutes; nil means that sign-in has ended.
+				user = s.checkGrant(sess)
 			}
 			if user != nil {
 				r = withValue(r, ctxSession, sess)
@@ -289,22 +302,6 @@ func (s *Server) isHTTPS(r *http.Request) bool {
 		return true
 	}
 	return s.cfg.TrustProxy && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
-}
-
-// baseURL is this app's address as the browser sees it, for feed links.
-func (s *Server) baseURL(r *http.Request) string {
-	scheme := "http"
-	if s.isHTTPS(r) {
-		scheme = "https"
-	}
-	host := r.Host
-	if s.cfg.TrustProxy {
-		if h := r.Header.Get("X-Forwarded-Host"); h != "" {
-			host, _, _ = strings.Cut(h, ",")
-			host = strings.TrimSpace(host)
-		}
-	}
-	return scheme + "://" + host
 }
 
 func (s *Server) clientIP(r *http.Request) string {
