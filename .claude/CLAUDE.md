@@ -36,3 +36,4 @@ Ansible, calendar views) from `../event_planning`, the newest sibling.
 - Connections (design in `../event_planning/CONNECTIONS_PLAN.md`): links to
   other apps are admin settings on `/admin/connections`; env vars override
   them per whole connection. Secrets encrypted with `secrets.key`.
+- `BOOKING_PLAN.md`: this app's part of bookable rooms / pending bookings / unscheduled events (design in `../.claude/plans/bookable-rooms-and-pending-bookings.md`). Tick its checkboxes as steps are done.
