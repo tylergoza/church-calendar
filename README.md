@@ -35,10 +35,10 @@ This calendar owns bookings, room requests, which rooms can be booked,
 the public calendar, the `.ics` feeds and the read API. Pushes from apps
 are never refused for conflicts: the calendar answers with a warning.
 
-Both sides of each connection are built. What is left is setting them up
-when the calendar is first deployed: tokens, registering the calendar in
-User Management, and each planner's **Send all** button to fill in what it
-already has (`PLAN.md`, steps 8 and 9).
+Both sides of each connection are built. Setting them up happens when the
+calendar is deployed: tokens, registering the calendar in User Management,
+and each planner's **Send all** button to fill in what it already has (see
+[Deploying](#deploying)).
 
 Setup is in [Connections](#connections),
 [Apps sending their events](#apps-sending-their-events) and
@@ -252,12 +252,128 @@ church-calendar backup /path/backup.db        # safe while the app is running
 
 The first user created is always an admin.
 
-## Backups
+## Registering with User Management
 
-**Settings → Download backup**, or the `backup` command, writes a
-consistent copy of the database while the app runs. To move to another
-server, stop the app there, put the file at its `DB_PATH`, copy
-`secrets.key` next to it, and start it again.
+Before turning SSO on, register this app from the `user_management` repo.
+Secrets live in the macOS Keychain and reach `make` through the `with-*`
+helpers in `~/.zshrc`: `with-do` (DigitalOcean token, service
+`digitalocean`), `with-um` (the User Management client secrets) and
+`with-cal` (this app's tracker token, service `church-calendar`).
+
+`with-um` needs one more line for this app: `UM_CALENDAR_SECRET`, read from
+the Keychain service `um-calendar` the same way as the others. `with-cal` is
+a small function of the same shape as the other apps' helpers:
+
+```sh
+with-cal() {
+  CAL_TRACKER_TOKEN=$(security find-generic-password -s church-calendar -w) "$@"
+}
+```
+
+```sh
+# in ../user_management
+with-do make register-app APP=calendar                             # dry run: shows what would change
+with-do make register-app APP=calendar DRY_RUN=false               # registers; saves the secret in the Keychain as um-calendar
+with-do make register-app APP=calendar DRY_RUN=false ROTATE=true   # lost or leaked secret: a new one, saved over the old
+```
+
+The SSO client ID is `calendar`. A new secret stops the old one working at
+once, so deploy here straight after rotating.
+
+## Deploying
+
+The app is one binary plus one `.db` file, behind [Caddy](https://caddyserver.com)
+for HTTPS. `deploy/` has the systemd unit (`deploy/church-calendar.service`)
+and a Caddyfile (`deploy/Caddyfile`) for doing it by hand.
+
+### DigitalOcean with Ansible
+
+`deploy/ansible/` works like the other apps', and by default puts the
+calendar **on the maintenance tracker's droplet**. It finds the droplet by
+the tracker's tag (`maintenance-tracker`) and adds itself alongside, on port
+8120, with its own service user (`calendar`), data folder
+(`/var/lib/church-calendar`) and Caddy site, at `calendar.<dns_zone>`.
+Provision adds the DNS record (pointing at the same droplet) and the service
+user; with no tagged droplet it would create one. Deploy runs the tests,
+builds the Linux binary here, backs up the database when the binary changes
+(keeping 10 sets: the database and `secrets.key` together, as
+`pre-deploy-<time>.db` and `.key` in `/var/lib/church-calendar/backups`),
+installs, and checks `/healthz`.
+
+Caddy's config is split so the apps can deploy without overwriting each
+other: `/etc/caddy/Caddyfile` only imports `/etc/caddy/sites/*.caddy`, and
+each app writes its own site there (`church-calendar.caddy` here). If the
+droplet still has the Caddyfile from an older tracker deploy, the calendar's
+deploy stops and asks you to deploy the updated tracker first, rather than
+taking the tracker offline.
+
+For a droplet of its own instead, set `droplet_name` and `do_tag` to
+`church-calendar` in `vars.yml`.
+
+```sh
+cp deploy/ansible/vars.example.yml deploy/ansible/vars.yml   # set app_domain, dns_zone, sso_url, base_url
+with-do with-um make provision         # first time (ends with a deploy, so it needs with-um too)
+with-do with-um make deploy            # every update after that
+```
+
+On the first deploy the admin user is created before the app starts, so
+`/setup` is never exposed. Set `CAL_ADMIN_PASSWORD` to choose its password,
+or a random one is printed at the end. With `sso_url` set there's no local
+admin to create: people come from User Management.
+
+The connections are optional. Leave each blank in `vars.yml` to manage it in
+the app on `/admin/connections`. To set one in `vars.yml` instead: fill in
+`tracker_url` and let `with-cal` pass the token from the Keychain
+(`church-calendar`, `CAL_TRACKER_TOKEN`: an API token made in the tracker
+under API, for example named "Calendar"), or fill in `events_url`, the event
+planner's address (no token).
+
+First deploy with connections in `vars.yml`:
+
+1. `with-do with-um with-cal make deploy`.
+2. Sign in, open **/admin/connections**, and press **Keep in settings** for each connection set in `vars.yml`. The app saves it (tokens are encrypted with `secrets.key`).
+3. Blank those values in `vars.yml` and redeploy. The app keeps its saved settings.
+
+The calendar can't pull events, so to fill it in, press **Send all events to
+the calendar** on the event planner's own Connections page once. Pressing it
+again is safe.
+
+Backups include `secrets.key`, which the saved tokens need, so restore both
+files together. Neither playbook touches `secrets.key`. If it's deleted, the app
+makes a new one and the saved tokens have to be entered again.
+
+#### Turning on single sign-on
+
+SSO is the expected setup, since User Management is already live. Set
+`sso_url` and `base_url` in `deploy/ansible/vars.yml`, register the app
+(above), and deploy with `with-um` so `UM_CALENDAR_SECRET` is set:
+
+```sh
+# in deploy/ansible/vars.yml:
+#   sso_url: https://accounts.example.org
+#   base_url: https://calendar.example.org   # sign-in returns to base_url/auth/callback
+with-do with-um make deploy
+```
+
+`sso_internal_url` defaults to `http://127.0.0.1:8100` (User Management on
+the same droplet). The deploy stops before building if `sso_url` is set
+without the secret or `base_url`, so deploy through `with-um` every time
+while SSO is on. The secret goes only into the root-only systemd drop-in,
+with nothing logged. To turn SSO back off, remove `sso_url` and deploy
+again. If User Management is down, use the `local-login on` break-glass
+(see [Single sign-on](#single-sign-on)).
+
+With a hardware SSH key, use a deploy key as described in the tracker's
+README (`ssh_private_key_file` in `vars.yml`; the same key works for all the apps).
+
+### Moving between hosts
+
+**Settings → Download backup** (or the `backup` command) writes a consistent
+copy of the database while the app runs. Stop the app on the new host, put the
+file at its database path (`/var/lib/church-calendar/calendar.db`, owned by
+`calendar`), and start it. Saved tokens are encrypted with `secrets.key`, kept
+next to the database: copy it along too, or enter those tokens again after the
+move. Droplet backups cover all the apps on a shared droplet.
 
 ## License
 

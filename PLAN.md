@@ -5,7 +5,7 @@ event, rehearsal, meeting and room booking on one calendar, with room
 conflicts caught across all the apps. People (inside or outside the church)
 can also ask for a room here.
 
-Status: step 7 (single sign-on) built (2026-10-13); registering in User Management is the user's, with the deploy.
+Status: step 8 (deploy) built (2026-10-13): `deploy/ansible` is ready; the first `with-do with-um make provision`, registering in User Management and the `with-cal` / `with-um` helpers are the user's. From the first deploy on, `001_initial.sql` is frozen: changes go in new migrations.
 
 ## The idea in one paragraph
 
@@ -353,11 +353,11 @@ Each step is a working app; stop after any of them.
 - [ ] Register in User Management (see `../user_management/CALENDAR_PLAN.md`; the repo side there is done, what's left is the user's: `with-um` in `~/.zshrc`, `register-app APP=calendar` or the Apps page, access)
 
 ### 8. Deploy
-- [ ] `deploy/ansible` copied from the event planner: service `church-calendar`, user `calendar`, `/var/lib/church-calendar`, Caddy site file, `calendar.<dns_zone>`
-- [ ] Main Caddyfile text identical to the other repos' `deploy.yml`
-- [ ] Connection variables optional in `vars.yml` (blank = manage in the app). When used, secrets come only from the Keychain helpers (`with-um` gets `UM_CALENDAR_SECRET`; a `with-cal` helper for `CAL_TRACKER_TOKEN`)
-- [ ] Backups include `secrets.key`
-- [ ] Backups of `/var/lib/church-calendar` the same way as the other apps
+- [x] `deploy/ansible` copied from the event planner: service `church-calendar`, user `calendar`, `/var/lib/church-calendar`, Caddy site file, `calendar.<dns_zone>`
+- [x] Main Caddyfile text identical to the other repos' `deploy.yml`
+- [x] Connection variables optional in `vars.yml` (blank = manage in the app). When used, secrets come only from the Keychain helpers (`with-um` gets `UM_CALENDAR_SECRET`; a `with-cal` helper for `CAL_TRACKER_TOKEN`)
+- [x] Backups include `secrets.key`
+- [x] Backups of `/var/lib/church-calendar` the same way as the other apps
 
 ### 9. Join the other apps
 - [ ] Event planner: `../event_planning/CALENDAR_PLAN.md`

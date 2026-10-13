@@ -1,0 +1,110 @@
+# Defaults for every setting. Override any of them in vars.yml (gitignored;
+# start from vars.example.yml), which is loaded after this file.
+
+# DigitalOcean API token with read/write scope, from the environment so it
+# never lands in a file.
+do_token: "{{ lookup('env', 'DIGITALOCEAN_TOKEN') }}"
+
+# Droplet. `doctl compute size list` / `region list` / `image list-distribution`
+# show the choices. nyc3 is New York 3; s-1vcpu-1gb is the $6/month Basic
+# droplet, which is plenty for this app.
+# By default the calendar shares the maintenance tracker's droplet: it finds
+# it by the tracker's tag and adds itself alongside (port 8120, its own
+# service user, data folder and Caddy site). For a droplet of its own, set
+# droplet_name and do_tag to church-calendar.
+droplet_name: maintenance-tracker
+do_region: nyc3
+do_size: s-1vcpu-1gb
+do_image: ubuntu-26-04-x64
+# Weekly droplet snapshots (adds 20% to the droplet price). The database is
+# the only state, and the pre-deploy backups below sit on the same disk.
+do_backups: true
+do_monitoring: true
+# Project (as named in the control panel) to put the droplet in. Empty means
+# the account's default project.
+do_project: ""
+# Droplets, firewall and deploys all find each other by this tag.
+do_tag: maintenance-tracker
+# More tags for the droplet, e.g. ones your own cloud firewalls target.
+# Added to existing droplets too on the next provision.
+do_extra_tags: []
+# Create a cloud firewall (named do_tag) that allows only SSH, HTTP and HTTPS.
+# Turn off if your own firewalls cover the droplet through do_extra_tags.
+do_firewall: true
+
+# Key Ansible connects with. Empty means your normal ssh setup (agent,
+# ~/.ssh/config). Set it to use a dedicated deploy key, e.g. when your usual
+# key is on a hardware token that asks for a PIN, which Ansible can't answer.
+ssh_private_key_file: ""
+# Agent holding that key, if not the one ~/.ssh/config picks (e.g. it points
+# at 1Password but the key was added with ssh-add). SSH_AUTH_SOCK means the
+# agent in your environment; anything else is a socket path.
+ssh_identity_agent: ""
+# Uploaded to your DigitalOcean account if it isn't there yet, and put on the
+# droplet for root when it's created.
+ssh_public_key_file: "{{ (ssh_private_key_file ~ '.pub') if ssh_private_key_file else '~/.ssh/id_ed25519.pub' }}"
+# More public key files to let in as root, e.g. your hardware-token keys when
+# Ansible uses a deploy key. Added on every provision; never removed.
+ssh_authorized_keys: []
+# Who may reach port 22. Narrow this to your own address if it's stable.
+ssh_sources: [0.0.0.0/0, "::/0"]
+
+# Church time zone: decides what "today" means.
+tz: America/Chicago
+
+# Connections (maintenance tracker, single sign-on, event planner). Each one
+# can be left blank to manage it in the app on /admin/connections instead. A
+# value set here is fixed: the app shows it but can't change it. Secrets come
+# from the Keychain through with-cal / with-um (README: Deploying), never from
+# a file.
+#
+# The maintenance tracker to import rooms from. Make the token in the tracker
+# under API ("Calendar"); with-cal passes it in as CAL_TRACKER_TOKEN.
+tracker_url: ""
+tracker_token: "{{ lookup('env', 'CAL_TRACKER_TOKEN') }}"
+
+# Single sign-on through User Management. Empty sso_url keeps the calendar's
+# own password login (or whatever is set on /admin/connections). To turn SSO
+# on here, set sso_url and base_url in vars.yml and deploy through with-um,
+# which passes the client secret (UM_CALENDAR_SECRET, saved in the Keychain as
+# um-calendar by `make register-app APP=calendar DRY_RUN=false` in
+# user_management). To turn it back off, unset sso_url and redeploy. If User
+# Management breaks while SSO is on, `local-login on` on the droplet is the
+# break-glass (README: Single sign-on).
+sso_url: ""
+# User Management for server-to-server calls; it runs on port 8100 of the
+# shared droplet.
+sso_internal_url: "http://127.0.0.1:8100"
+sso_client_id: calendar
+sso_client_secret: "{{ lookup('env', 'UM_CALENDAR_SECRET') }}"
+# The calendar's public https address, e.g. https://calendar.example.org.
+# Used for the sign-in return address (base_url/auth/callback), which must
+# match what's registered in User Management, and for feed and API links.
+# Required when sso_url is set.
+base_url: ""
+
+# The event planner's public address. Turns on "Make this an event". No
+# token: the event planner pushes to the calendar with its own source token.
+events_url: ""
+
+# The first deploy to an empty database creates this admin before the app
+# starts, so /setup is never open. Leave CAL_ADMIN_PASSWORD unset to get a
+# random password printed at the end of the run. Skipped when sso_url is set:
+# people come from User Management then.
+admin_username: admin
+admin_password: "{{ lookup('env', 'CAL_ADMIN_PASSWORD') }}"
+
+# Deploys back up the database (and secrets.key, which the saved tokens need)
+# before installing a changed binary, and keep this many of those backups.
+keep_backups: 10
+# `make test` runs before every build; -e skip_tests=true skips it.
+skip_tests: false
+
+# Paths on the droplet, matching deploy/church-calendar.service.
+app_data_dir: /var/lib/church-calendar
+app_db: "{{ app_data_dir }}/calendar.db"
+app_backup_dir: "{{ app_data_dir }}/backups"
+
+do_headers:
+  Authorization: "Bearer {{ do_token }}"
+  Content-Type: application/json

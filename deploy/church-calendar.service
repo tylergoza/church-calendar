@@ -1,0 +1,31 @@
+# systemd unit for running the binary directly (no Docker). Install:
+#   sudo useradd --system --home-dir /var/lib/church-calendar --shell /usr/sbin/nologin calendar
+#   sudo install -m 755 church-calendar-linux-amd64 /usr/local/bin/church-calendar
+#   sudo cp church-calendar.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now church-calendar
+# Edit TZ below first. Run commands as the service user against the same
+# database, flags before the command:
+#   sudo -u calendar church-calendar -db /var/lib/church-calendar/calendar.db create-user alice --admin
+# Logs: journalctl -u church-calendar -f
+[Unit]
+Description=Church Calendar
+After=network.target
+
+[Service]
+User=calendar
+StateDirectory=church-calendar
+Environment=ADDR=127.0.0.1:8120
+Environment=DB_PATH=/var/lib/church-calendar/calendar.db
+Environment=TZ=America/Chicago
+# Caddy (deploy/Caddyfile) is in front; it's the only thing that can reach
+# 127.0.0.1:8120, so its X-Forwarded-* headers can be trusted.
+Environment=TRUST_PROXY=1
+ExecStart=/usr/local/bin/church-calendar
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
