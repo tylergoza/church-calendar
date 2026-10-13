@@ -1,0 +1,64 @@
+{{define "content"}}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/rooms">Rooms</a></nav>
+<div class="page-head">
+  <div><h1>Import rooms from the tracker</h1><p class="muted">The maintenance tracker owns the church's places. Pick the ones people book; they become rooms here. Importing again brings names up to date and never adds a room twice.</p></div>
+</div>
+{{with .Result}}
+<div class="card">
+  <h2 class="section__title">Done</h2>
+  <ul>
+    {{with .Added}}<li>Added: {{join . ", "}}.</li>{{end}}
+    {{with .Linked}}<li>Rooms you'd typed in that now follow the tracker: {{join . ", "}}.</li>{{end}}
+    {{with .Renamed}}<li>Brought up to date: {{join . ", "}}.</li>{{end}}
+    {{with .Archived}}<li>Archived, as they're gone from the tracker: {{join . ", "}}.</li>{{end}}
+    {{with .Bookings}}<li>{{pluralize . "booking room"}} sent by name now linked to a room, so they're checked for conflicts.</li>{{end}}
+    {{if not (or .Added .Linked .Renamed .Archived .Bookings)}}<li>Everything was already up to date.</li>{{end}}
+  </ul>
+  {{with .Skipped}}<div class="alert alert--error" role="alert"><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
+</div>
+{{end}}
+{{if .Off}}
+<div class="empty">
+  <h2>The tracker isn't connected</h2>
+  <p>{{if .User.IsAdmin}}Add its address and an API token on <a href="/admin/connections#tracker">Connections</a>.{{else}}An admin can connect it on Connections. Until then, add rooms by hand.{{end}}</p>
+</div>
+{{else if .Error}}
+<div class="alert alert--error" role="alert">{{.Error}}</div>
+{{else}}
+<form method="post" action="/rooms/import" class="form">
+  {{template "csrf" .CSRF}}
+  {{if .Places}}
+  <div class="table-wrap">
+    <table class="table table--stack">
+      <thead><tr><th><span class="sr-only">Pick</span></th><th>Place</th><th>Kind</th><th>Here</th></tr></thead>
+      <tbody>
+        {{range .Places}}
+          <tr>
+            <td>{{if not (or .Exists .Taken)}}<input type="checkbox" name="place" value="{{.ID}}" id="place-{{.ID}}" aria-label="Import {{.Label}}">{{end}}</td>
+            <td data-label="Place"><label for="place-{{.ID}}"><strong>{{.Label}}</strong></label><br><span class="muted small">{{.Path}}</span></td>
+            <td data-label="Kind">{{.Kind}}</td>
+            <td data-label="Here">
+              {{if .Exists}}<a href="/rooms/{{.Room.ID}}">{{.Room.Name}}</a>{{if .Room.Archived}} <span class="badge badge--locked">Archived</span>{{end}}
+              {{else if .Taken}}<span class="muted">Another place already has the name {{.Room.Name}} here</span>
+              {{else if .Room}}Takes over <a href="/rooms/{{.Room.ID}}">{{.Room.Name}}</a>
+              {{else}}<span class="muted">Not a room yet</span>{{end}}
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="muted">The tracker has no buildings, rooms or areas yet.</p>
+  {{end}}
+  {{with .Gone}}
+  <div class="alert alert--error" role="alert">Gone from the tracker, so importing will archive {{if eq (len .) 1}}this room{{else}}these rooms{{end}} (their bookings keep them): {{range $i, $r := .}}{{if $i}}, {{end}}{{$r.Name}}{{end}}.</div>
+  {{end}}
+  <div class="form__actions">
+    <button type="submit" class="btn btn--primary">Import picked places and update</button>
+    <a class="btn btn--ghost" href="/rooms">Cancel</a>
+  </div>
+  <p class="hint">A place with the same name as a room you typed in takes that room over, with its bookings. Rooms here keep their own capacity, request settings and notes.</p>
+</form>
+{{end}}
+{{end}}

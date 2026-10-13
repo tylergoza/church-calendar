@@ -124,6 +124,16 @@ behaves as if that app doesn't exist.
 
 Single sign-on joins this list when it's built (`PLAN.md` step 7).
 
+**Importing rooms.** With the tracker connected, schedulers get **Import
+from tracker** on `/rooms`. Pick the buildings, rooms and areas people
+book; each becomes a room named as the tracker labels it ("104 – Nursery").
+A room typed in by hand with the same name is taken over, not duplicated.
+Every import also brings imported rooms' names and paths up to date and
+archives rooms whose place was deleted in the tracker. Bookings an app sent
+by name before the room existed (by its label or bare name) are linked to
+it, so they're checked for conflicts; adding or renaming a room by hand
+does the same for its name.
+
 The rules:
 
 - **Environment, then settings, then off.** If **any** of a connection's

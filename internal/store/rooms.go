@@ -70,18 +70,32 @@ func roomNameErr(err error) error {
 	return err
 }
 
-// CreateRoom adds a room typed in by hand.
+// CreateRoom adds a room typed in by hand. Bookings sent with its name
+// before it was here are linked to it.
 func (s *Store) CreateRoom(r *Room) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO rooms (name, capacity, bookable, needs_approval, notes) VALUES (?, ?, ?, ?, ?)`,
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`INSERT INTO rooms (name, capacity, bookable, needs_approval, notes) VALUES (?, ?, ?, ?, ?)`,
 		strings.TrimSpace(r.Name), nullInt(int64(r.Capacity)), r.Bookable, r.NeedsApproval, r.Notes)
 	if err != nil {
 		return 0, roomNameErr(err)
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if _, err := linkRoomNames(tx, nil); err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
 }
 
 // UpdateRoom saves a room's details and keeps the names stored on its
-// bookings in step, so they read the same everywhere.
+// bookings in step, so they read the same everywhere. Bookings sent with
+// its new name are linked to it.
 func (s *Store) UpdateRoom(r *Room) error {
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -98,6 +112,9 @@ func (s *Store) UpdateRoom(r *Room) error {
 		return ErrNotFound
 	}
 	if _, err := tx.Exec(`UPDATE booking_rooms SET room_name = ? WHERE room_id = ?`, name, r.ID); err != nil {
+		return err
+	}
+	if _, err := linkRoomNames(tx, nil); err != nil {
 		return err
 	}
 	return tx.Commit()

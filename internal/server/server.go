@@ -192,6 +192,7 @@ func (s *Server) funcs() template.FuncMap {
 		"requestStatusLabel": store.RequestStatusLabel,
 		"add":                func(a, b int) int { return a + b },
 		"pluralize":          pluralize,
+		"join":               strings.Join,
 		"lines":              func(t string) []string { return strings.Split(strings.TrimSpace(t), "\n") },
 	}
 }
