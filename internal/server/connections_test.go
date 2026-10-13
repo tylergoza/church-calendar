@@ -40,8 +40,8 @@ func TestConnectionSaveAndTest(t *testing.T) {
 	app := fakeApp(t)
 	page := "/admin/connections"
 
-	if body := c.get(page, 200); strings.Count(body, "Not connected") != 2 {
-		t.Error("both connections should start off")
+	if body := c.get(page, 200); strings.Count(body, "Not connected") != 3 {
+		t.Error("all three connections should start off")
 	}
 	// Bad address: sent back with what was typed.
 	if body := c.post(page, "/admin/connections/events", url.Values{"events_url": {"ftp://nope"}}, 422); !strings.Contains(body, "should look like") || !strings.Contains(body, "ftp://nope") {

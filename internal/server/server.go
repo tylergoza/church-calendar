@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"sort"
@@ -24,6 +25,7 @@ import (
 	"time"
 
 	"github.com/tylergoza/church-calendar/internal/connections"
+	"github.com/tylergoza/church-calendar/internal/sso"
 	"github.com/tylergoza/church-calendar/internal/store"
 	"github.com/tylergoza/church-calendar/web"
 )
@@ -52,13 +54,22 @@ type Server struct {
 	// worker cache name.
 	assetVersion string
 	importMap    template.HTML
-	csp          string
+	// cspHead/cspTail surround form-action's SSO origin, which is added per
+	// request so a swapped SSO address is honoured at once.
+	cspHead, cspTail string
 
 	tmplMu sync.Mutex
 	tmpls  map[string]*template.Template
 
 	siteName       atomic.Value
 	publicRequests atomic.Bool
+
+	sso atomic.Pointer[sso.Client]
+	// ssoBroken is why saved SSO settings were refused ("" when fine);
+	// ssoBaseURL is this app's configured public address.
+	ssoBroken  atomic.Value
+	ssoBaseURL atomic.Value
+	grants     *grantChecks
 
 	limiter *loginLimiter
 	// requestLimiter counts room requests sent by visitors, per IP.
@@ -74,7 +85,9 @@ func New(cfg Config, st *store.Store, logger *slog.Logger) (*Server, error) {
 		cfg.Env = os.Getenv
 	}
 	s := &Server{cfg: cfg, store: st, log: logger, limiter: newLoginLimiter(10, 15*time.Minute),
-		requestLimiter: newLoginLimiter(5, time.Hour)}
+		requestLimiter: newLoginLimiter(5, time.Hour), grants: newGrantChecks()}
+	s.ssoBroken.Store("")
+	s.ssoBaseURL.Store("")
 	if cfg.Dev {
 		s.webFS = os.DirFS("web")
 	} else {
@@ -88,7 +101,10 @@ func New(cfg Config, st *store.Store, logger *slog.Logger) (*Server, error) {
 		return nil, err
 	}
 	// Secrets saved as plain text (by hand, or before sealing) are sealed now.
-	if err := st.SealPlainSecrets(connections.SecretKeys(connectionDefs)...); err != nil {
+	if err := st.SealPlainSecrets(append(connections.SecretKeys(connectionDefs), pendingKey("sso_client_secret"))...); err != nil {
+		return nil, err
+	}
+	if err := s.reloadSSO(); err != nil {
 		return nil, err
 	}
 	s.reloadSettings()
@@ -114,6 +130,78 @@ func (s *Server) reloadSettings() {
 }
 
 func (s *Server) SiteName() string { return s.siteName.Load().(string) }
+
+// buildSSO checks the SSO connection's values (by settings key) and makes
+// the client plus the configured base URL. With no SSO address the client
+// is disabled and the app uses its local login.
+func buildSSO(v map[string]string) (*sso.Client, string, error) {
+	off := sso.New("", "", "", "")
+	base := strings.TrimRight(strings.TrimSpace(v["base_url"]), "/")
+	if base != "" {
+		if u, err := url.Parse(base); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return off, "", fmt.Errorf("this app's address %q must be an http(s) address like https://calendar.example.org", base)
+		}
+	}
+	c := sso.New(v["sso_url"], v["sso_internal_url"], v["sso_client_id"], v["sso_client_secret"])
+	if !c.Enabled() {
+		return c, base, nil
+	}
+	for name, a := range map[string]string{"the User Management address": c.PublicURL, "the internal address": c.InternalURL} {
+		if u, err := url.Parse(a); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return off, "", fmt.Errorf("%s %q must be an http(s) address", name, a)
+		}
+	}
+	if c.ClientID == "" || c.ClientSecret == "" {
+		return off, "", errors.New("a User Management address is set, so the client ID and client secret are needed too (from registering this app in User Management)")
+	}
+	return c, base, nil
+}
+
+// reloadSSO rebuilds the SSO client from the connection's live values
+// (never the sso_pending_* ones, kept for the sign-in test). Wrong values
+// from the environment are an error (a deploy mistake, loud at start);
+// wrong saved ones never stop the app: it logs, remembers why for the
+// admin banner and uses local login.
+func (s *Server) reloadSSO() error {
+	r := s.connection("sso")
+	vals, err := r.Values, error(nil)
+	switch {
+	case r.FromEnv:
+		vals = r.FromServer
+	case len(r.Unreadable) > 0:
+		err = errors.New("the saved client secret can't be read (the database came from a server with another secrets.key)")
+	}
+	c, base := sso.New("", "", "", ""), ""
+	if err == nil {
+		c, base, err = buildSSO(vals)
+	}
+	broken := ""
+	if err != nil {
+		if r.FromEnv {
+			return fmt.Errorf("single sign-on (environment): %w", err)
+		}
+		broken = err.Error()
+		s.log.Error("saved single sign-on settings are broken; using local login", "err", err)
+	}
+	s.sso.Store(c)
+	s.ssoBaseURL.Store(base)
+	s.ssoBroken.Store(broken)
+	if c.Enabled() && s.store.Setting(localLoginSetting, "") == "on" {
+		s.log.Warn("local login is on (break-glass): /login shows the password form; turn it off with the local-login off command")
+	}
+	return nil
+}
+
+// SSO is the current sign-in client; it may be swapped between calls, so
+// read it once where consistency matters.
+func (s *Server) SSO() *sso.Client { return s.sso.Load() }
+
+// configuredBaseURL is this app's public address from the SSO connection
+// ("" if unset).
+func (s *Server) configuredBaseURL() string { return s.ssoBaseURL.Load().(string) }
+
+// SSOBroken is why saved SSO settings were refused, or "".
+func (s *Server) SSOBroken() string { return s.ssoBroken.Load().(string) }
 
 // computeAssets hashes the static tree and builds the import map. The
 // import map is an inline script, so its hash goes into the CSP.
@@ -154,7 +242,7 @@ func (s *Server) computeAssets() error {
 	// JS-escape it inside the <script> element.
 	s.importMap = template.HTML(`<script type="importmap">` + string(im) + `</script>`)
 	sum := sha256.Sum256(im)
-	s.csp = strings.Join([]string{
+	s.cspHead = strings.Join([]string{
 		"default-src 'self'",
 		"script-src 'self' 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'",
 		"style-src 'self'",
@@ -163,10 +251,41 @@ func (s *Server) computeAssets() error {
 		"manifest-src 'self'",
 		"worker-src 'self'",
 		"base-uri 'self'",
+		// A form posted after a sign-in ends is redirected to /login and
+		// on to User Management; browsers check form-action on redirects.
 		"form-action 'self'",
-		"frame-ancestors 'none'",
 	}, "; ")
+	s.cspTail = "; frame-ancestors 'none'"
 	return nil
+}
+
+// contentSecurityPolicy is the policy for one response, with the current
+// SSO origin allowed in form-action.
+//
+// The Connections pages also allow the pending SSO origin, because the
+// Test sign-in form there redirects to it (browsers check form-action on
+// redirects).
+func (s *Server) contentSecurityPolicy(r *http.Request) string {
+	extra := ""
+	if strings.HasPrefix(r.URL.Path, "/admin/connections") {
+		if o := s.pendingOrigin(); o != s.ssoOrigin() {
+			extra = o
+		}
+	}
+	return s.cspHead + s.ssoOrigin() + extra + s.cspTail
+}
+
+// ssoOrigin is " <User Management's origin>" for the CSP, or "".
+func (s *Server) ssoOrigin() string {
+	c := s.SSO()
+	if !c.Enabled() {
+		return ""
+	}
+	u, err := url.Parse(c.PublicURL)
+	if err != nil {
+		return ""
+	}
+	return " " + u.Scheme + "://" + u.Host
 }
 
 // asset returns the versioned URL for a file under web/static.
@@ -249,6 +368,9 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, page
 	data["User"] = currentUser(r)
 	data["CSRF"] = csrfToken(r)
 	data["SiteName"] = s.SiteName()
+	if u := currentUser(r); u.IsAdmin() {
+		data["SSOBroken"] = s.SSOBroken()
+	}
 	data["ImportMap"] = s.importMap
 	data["AssetVersion"] = s.assetVersion
 	data["Path"] = r.URL.Path

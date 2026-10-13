@@ -55,9 +55,30 @@
       <div class="form__actions">
         <button type="submit" class="btn btn--primary">Save</button>
       </div>
+      {{if .IsSSO}}
+      <p class="hint">Saving keeps these as pending and doesn't change how anyone signs in. Leave the secret blank to keep the current one.</p>
+      {{else}}
       <p class="hint">Saving {{if .CanTest}}checks the connection, and {{end}}keeps what you typed even if the other app isn't running yet.</p>
+      {{end}}
     </form>
-    {{if .Saved}}
+    {{if .IsSSO}}
+      {{if .Pending}}
+        <div class="alert alert--info" role="status"><strong>Pending: not live until a test sign-in works.</strong> The values above are waiting. Test sign-in takes you to User Management and back; it only goes live if you come back as an admin of this app. You stay signed in here either way.</div>
+        <div class="form__actions">
+          <form method="post" action="/admin/connections/sso/signin-test" class="inline-form">
+            {{template "csrf" $.CSRF}}
+            <button type="submit" class="btn btn--primary">Test sign-in</button>
+          </form>
+          <form method="post" action="/admin/connections/sso/discard" class="inline-form">
+            {{template "csrf" $.CSRF}}
+            <button type="submit" class="btn btn--ghost">Discard</button>
+          </form>
+        </div>
+      {{end}}
+      {{if .Saved}}
+        {{template "delete-button" (dict "Action" "/admin/connections/sso/clear" "CSRF" $.CSRF "Label" "Turn off single sign-on" "Confirm" "Turn off single sign-on? Everyone will need a local password here to sign in. People who only ever signed in through User Management have none; set one on the server with church-calendar reset-password USERNAME.")}}
+      {{end}}
+    {{else if .Saved}}
       {{template "delete-button" (dict "Action" (printf "/admin/connections/%s/clear" .Def.ID) "CSRF" $.CSRF "Label" "Disconnect" "Confirm" (printf "Remove the saved %s settings?" .Def.Name))}}
     {{end}}
   {{end}}

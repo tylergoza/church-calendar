@@ -347,6 +347,7 @@ select:disabled { opacity: .6; }
 .alert { padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 16px; }
 .alert ul { margin: 6px 0 0; padding-left: 1.2em; }
 .alert--error { background: var(--overdue-bg); color: var(--overdue); }
+.alert--info { background: var(--surface-2); color: var(--text); }
 
 .flash {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
