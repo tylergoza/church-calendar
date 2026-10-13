@@ -5,7 +5,7 @@ event, rehearsal, meeting and room booking on one calendar, with room
 conflicts caught across all the apps. People (inside or outside the church)
 can also ask for a room here.
 
-Status: step 4 (room requests) built (2026-10-13).
+Status: step 5 (push API for apps) built (2026-10-13).
 
 ## The idea in one paragraph
 
@@ -334,12 +334,12 @@ Each step is a working app; stop after any of them.
 - [x] Tests: approve makes exactly one booking; double-approve is refused (409), plus busy-room rules, honeypot, rate limit, withdraw and visibility of the status page
 
 ### 5. Push API for apps
-- [ ] Source tokens (kind `source`, tied to one source)
-- [ ] `PUT` / `DELETE /api/v1/bookings/{source}/{source_id}`, room matching, always-200 with `conflicts`
-- [ ] `replaces` handling in one transaction
-- [ ] `GET /api/v1/availability`, `/api/v1/rooms`, `/api/v1/bookings/{source}`
-- [ ] **Connected apps** admin page
-- [ ] Tests: idempotent PUT, wrong source 403, `replaces`, locked bookings stored without title even if one is sent
+- [x] Source tokens (kind `source`, tied to one source), made under **App tokens** on `/admin/tokens`. Only `events` and `productions` (`store.AppSources`). "Can see private events" (on by default for apps) decides whether other bookings' private details show in availability and conflicts; an app always sees its own in full
+- [x] `PUT` / `DELETE /api/v1/bookings/{source}/{source_id}`, room matching (place ID, then name; a match is stored under the calendar's name for the room), always-200 with `conflicts` in the `calendar.Block` shape the event planner's client reads. Times the event planner's form allows but the calendar can't use are tidied, not refused (end with no start: all day; same-day end not after the start: dropped), so its send queue can't jam on them
+- [x] `replaces` handling in one transaction: only a `calendar` or `request` booking, its request moves over, a repeat's date is skipped; anything else (already gone on a retry, another app's) is ignored. **Make this an event** is now on hand-made bookings and approved requests when the event planner's address is set
+- [x] `GET /api/v1/availability` (`{"busy": [...]}`, rooms by name, known rooms and pushed-by-name places), `/api/v1/rooms` (all unarchived rooms with `bookable`, since apps may book any), `/api/v1/bookings/{source}` (`updated_since` a date or RFC 3339). Availability and rooms take read tokens too
+- [x] **Connected apps** admin page (`/admin/apps`): tokens, last sent, bookings, last change, link to the event planner's Connections page when its address is set
+- [x] Tests: idempotent PUT, wrong source 403, `replaces`, locked bookings stored without title even if one is sent; plus room matching, tidied times, conflicts by token access, availability, `updated_since`, app tokens and Make this an event
 
 ### 6. Tracker import
 - [ ] `internal/tracker` client (copy from the event planner; only places) and the **Tracker** connection section

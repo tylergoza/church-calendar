@@ -11,7 +11,7 @@ import (
 const tokenPrefix = "cal_"
 
 // Token kinds: read is for the read API (websites, phones' calendars);
-// source is an app that pushes its own bookings (PLAN.md step 5).
+// source is an app that pushes its own bookings.
 const (
 	TokenRead   = "read"
 	TokenSource = "source"
@@ -24,14 +24,15 @@ type Token struct {
 	Name       string // what uses it, e.g. "Church website"
 	Kind       string
 	Source     string // the app a source token is for; "" for read tokens
-	SeePrivate bool   // a read token that sees private bookings (never locked ones)
+	SeePrivate bool   // sees private bookings (never locked ones)
 	Prefix     string
 	CreatedBy  string
 	CreatedAt  string
 	LastUsed   string // "" if never
 }
 
-// Access is the calendar access a read token grants.
+// Access is the calendar access a token grants (a source token always
+// sees its own source's bookings in full as well).
 func (t *Token) Access() Access {
 	if t.SeePrivate {
 		return AccessPrivate
@@ -47,9 +48,21 @@ func hashToken(token string) string {
 // CreateReadToken makes a read token and returns it. This is the only time
 // it can be seen.
 func (s *Store) CreateReadToken(name string, seePrivate bool, createdBy int64) (string, error) {
+	return s.createToken(name, TokenRead, "", seePrivate, createdBy)
+}
+
+// CreateSourceToken makes a token for an app that pushes its bookings
+// (source is one of AppSources) and returns it, the only time it can be
+// seen. seePrivate lets the app see other bookings' private details in
+// availability and conflicts; its own bookings it always sees.
+func (s *Store) CreateSourceToken(name, source string, seePrivate bool, createdBy int64) (string, error) {
+	return s.createToken(name, TokenSource, source, seePrivate, createdBy)
+}
+
+func (s *Store) createToken(name, kind, source string, seePrivate bool, createdBy int64) (string, error) {
 	token := tokenPrefix + RandomToken()
-	_, err := s.DB.Exec(`INSERT INTO tokens (name, kind, see_private, hash, prefix, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
-		strings.TrimSpace(name), TokenRead, seePrivate, hashToken(token), token[:len(tokenPrefix)+6], nullInt(createdBy))
+	_, err := s.DB.Exec(`INSERT INTO tokens (name, kind, source, see_private, hash, prefix, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		strings.TrimSpace(name), kind, nullStr(source), seePrivate, hashToken(token), token[:len(tokenPrefix)+6], nullInt(createdBy))
 	return token, err
 }
 
@@ -82,9 +95,9 @@ func (s *Store) DeleteToken(id int64) error {
 	return err
 }
 
-// SetTokenPrivate turns a read token's access to private bookings on or off.
+// SetTokenPrivate turns a token's access to private bookings on or off.
 func (s *Store) SetTokenPrivate(id int64, private bool) error {
-	_, err := s.DB.Exec(`UPDATE tokens SET see_private = ? WHERE id = ? AND kind = ?`, private, id, TokenRead)
+	_, err := s.DB.Exec(`UPDATE tokens SET see_private = ? WHERE id = ?`, private, id)
 	return err
 }
 

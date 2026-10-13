@@ -43,7 +43,8 @@ type CalendarEntry struct {
 	Busy bool
 }
 
-func entryFor(b Booking, a Access) CalendarEntry {
+// EntryFor is the booking as a reader with access a sees it.
+func EntryFor(b Booking, a Access) CalendarEntry {
 	if a.Full(b.Visibility) {
 		return CalendarEntry{Booking: b}
 	}
@@ -68,7 +69,7 @@ func (s *Store) Calendar(from, to string, a Access) ([]CalendarEntry, error) {
 	}
 	out := make([]CalendarEntry, len(list))
 	for i, b := range list {
-		out[i] = entryFor(b, a)
+		out[i] = EntryFor(b, a)
 	}
 	return out, nil
 }

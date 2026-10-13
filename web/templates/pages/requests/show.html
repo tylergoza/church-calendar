@@ -17,7 +17,7 @@
     <div><dt>Asked by</dt><dd>{{$q.Name}}{{with .Asker}} <span class="muted small">({{.Username}})</span>{{end}}<br>{{$q.Contact}}</dd></div>
   </dl>
   {{with $q.Details}}<div class="notes">{{range lines .}}<p>{{.}}</p>{{end}}</div>{{end}}
-  {{if $q.BookingID}}<p><a href="/calendar/{{$q.BookingID}}">See the booking</a></p>{{end}}
+  {{if $q.BookingID}}<p><a href="/calendar/{{$q.BookingID}}">See the booking</a>{{with .MakeEventURL}} · <a href="{{.}}">Make this an event</a>{{end}}</p>{{end}}
   {{with $q.Answer}}<p class="muted small">Note back: {{.}}</p>{{end}}
 </div>
 {{if $q.Waiting}}

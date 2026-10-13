@@ -70,6 +70,35 @@ no email yet: people get a `/request/{id}?code=…` link to check back on.
 - `/calendar/by-source/{source}/{id}` sends the apps' old calendar links to
   the booking they pushed.
 
+## Apps sending their events
+
+The event planner and the production planner send their dates here (the
+calendar never fetches them). An admin makes an **app token** for each on
+**API tokens** and pastes it, with this calendar's address, into the
+calendar section of that app's own **Connections** page; that page's
+send-everything button brings over what the app already has. **Connected
+apps** (`/admin/apps`) shows each app's tokens, when it last sent, and how
+many bookings it has here.
+
+With an app token (`Authorization: Bearer cal_…`), under `/api/v1`:
+
+| Endpoint | |
+|---|---|
+| `PUT /bookings/{source}/{source_id}` | Create or replace that booking (JSON as in `PLAN.md`). Always 200 with the booking and any `conflicts`: a clash is a warning, never a refusal. 400 only for dates or times it can't store, with `fields` |
+| `DELETE /bookings/{source}/{source_id}` | 204, even if it was already gone |
+| `GET /bookings/{source}?updated_since=` | The app's own bookings, to check it's in step |
+| `GET /availability?rooms=Hall,Kitchen&from=&to=` | What's booked in those rooms, from any app (also with a read token) |
+| `GET /rooms` | The calendar's rooms, with tracker place IDs (also with a read token) |
+
+A token only touches its own app's bookings (403 otherwise). Rooms are
+matched by the tracker's place ID, then by name; unknown places are kept
+by name but not checked for clashes, and never become rooms. Locked
+bookings are stored with no title or description even if one is sent.
+`replaces` (from **Make this an event**, shown on hand-made bookings and
+approved requests when the event planner is connected) swaps a hand-made
+booking for the event's in one go. Other bookings show to an app as busy
+unless its token can see private events; its own always show in full.
+
 ## Configuration
 
 Set with a flag or an environment variable. Flags go **before** any command.

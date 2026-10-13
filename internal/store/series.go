@@ -338,6 +338,13 @@ func (s *Store) DeleteBooking(id int64) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := deleteBooking(tx, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func deleteBooking(tx *sql.Tx, id int64) error {
 	var seriesID sql.NullInt64
 	var date string
 	if err := tx.QueryRow(`SELECT series_id, occurrence_date FROM bookings WHERE id = ?`, id).Scan(&seriesID, &date); err != nil {
@@ -369,11 +376,9 @@ func (s *Store) DeleteBooking(id int64) error {
 		return err
 	}
 	if seriesID.Valid {
-		if err := dropEmptySeries(tx, seriesID.Int64); err != nil {
-			return err
-		}
+		return dropEmptySeries(tx, seriesID.Int64)
 	}
-	return tx.Commit()
+	return nil
 }
 
 // dropEmptySeries deletes a series with no dates left.

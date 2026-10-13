@@ -94,6 +94,7 @@ func (s *Server) routes() http.Handler {
 	admin("POST /admin/connections/{id}/test", s.handleConnectionTest)
 	admin("POST /admin/connections/{id}/keep", s.handleConnectionKeep)
 	admin("POST /admin/connections/{id}/clear", s.handleConnectionClear)
+	admin("GET /admin/apps", s.handleApps)
 	admin("GET /admin/tokens", s.handleTokens)
 	admin("POST /admin/tokens", s.handleTokenCreate)
 	admin("POST /admin/tokens/{id}/private", s.handleTokenPrivate)
