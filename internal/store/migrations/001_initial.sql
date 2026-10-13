@@ -172,7 +172,6 @@ CREATE TABLE tokens (
     prefix      TEXT NOT NULL,
     created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
     last_used   TEXT,
-    revoked_at  TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     CHECK ((kind = 'source') = (source IS NOT NULL))
 );

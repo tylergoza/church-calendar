@@ -12,17 +12,11 @@ import (
 
 func bookingURL(id int64) string { return "/calendar/" + strconv.FormatInt(id, 10) }
 
-// canSeeDetails is the visibility rule, the same as the event planner's:
-// public bookings show in full to everyone, private ones to people signed
-// in, and locked ones to nobody (only their rooms and times show).
+// canSeeDetails is the visibility rule (store.Access): public bookings
+// show in full to everyone, private ones to people signed in, and locked
+// ones to nobody (only their rooms and times show).
 func canSeeDetails(b *store.Booking, u *store.User) bool {
-	switch b.Visibility {
-	case "public":
-		return true
-	case "private":
-		return u != nil
-	}
-	return false
+	return store.AccessFor(u).Full(b.Visibility)
 }
 
 // sourceLabel names where a booking came from.
@@ -84,13 +78,27 @@ func (s *Server) handMade(w http.ResponseWriter, r *http.Request) (*store.Bookin
 	return b, true
 }
 
+// handleBookingShow is one booking. Visitors only find the ones they may
+// see in full (anything else is 404, so its being there isn't given away);
+// signed-in people also reach busy and cancelled ones, from conflicts.
 func (s *Server) handleBookingShow(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	if u == nil {
+		if _, err := s.store.CalendarBooking(pathID(r), store.AccessPublic); errors.Is(err, store.ErrNotFound) {
+			s.render(w, r, http.StatusNotFound, "error", map[string]any{
+				"Title": "Not found", "Message": "We couldn't find that event.", "PublicHeader": true,
+			})
+			return
+		} else if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	}
 	b, ok := s.booking(w, r)
 	if !ok {
 		return
 	}
-	u := currentUser(r)
-	data := map[string]any{"Booking": b, "CanSee": canSeeDetails(b, u), "Source": sourceLabel(b.Source)}
+	data := map[string]any{"Booking": b, "CanSee": canSeeDetails(b, u), "Source": sourceLabel(b.Source), "PublicHeader": u == nil}
 	data["Title"] = "Busy"
 	if data["CanSee"].(bool) {
 		data["Title"] = b.Title

@@ -1,6 +1,6 @@
 {{define "content"}}
 {{$b := .Booking}}
-<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Calendar</a></nav>
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/calendar?month={{slice $b.StartsOn 0 7}}">Calendar</a></nav>
 <div class="page-head">
   <div>
     {{if .CanSee}}
@@ -19,10 +19,10 @@
     <div><dt>When</dt><dd>{{$b.When}}</dd></div>
     <div><dt>Rooms</dt><dd>{{range $i, $r := $b.Rooms}}{{if $i}}, {{end}}{{if and $.User $r.RoomID}}<a href="/rooms/{{$r.RoomID}}">{{$r.Name}}</a>{{else}}{{$r.Name}}{{end}}{{else}}<span class="muted">None</span>{{end}}</dd></div>
     {{if .CanSee}}{{with .Repeats}}<div><dt>Repeats</dt><dd>{{.}}</dd></div>{{end}}{{end}}
-    {{if .User}}<div><dt>From</dt><dd>{{if and $b.URL .CanSee}}<a href="{{$b.URL}}">{{.Source}}</a>{{else}}{{.Source}}{{end}}</dd></div>{{end}}
+    {{if and .User .CanSee}}<div><dt>From</dt><dd>{{if $b.URL}}<a href="{{$b.URL}}">{{.Source}}</a>{{else}}{{.Source}}{{end}}</dd></div>{{end}}
   </dl>
   {{if .CanSee}}{{with $b.Description}}<p>{{range lines .}}{{.}}<br>{{end}}</p>{{end}}{{end}}
-  {{if and .User (not $b.HandMade)}}<p class="hint">This booking comes from the {{.Source}}, so it's changed there.</p>{{end}}
+  {{if and .User .CanSee (not $b.HandMade)}}<p class="hint">This booking comes from the {{.Source}}, so it's changed there.</p>{{end}}
 </div>
 {{if .Conflicts}}
 <div class="card card--alert">

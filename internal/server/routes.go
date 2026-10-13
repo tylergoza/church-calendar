@@ -41,8 +41,10 @@ func (s *Server) routes() http.Handler {
 
 	// The calendar is public: no requireUser. Signed-in people get the same
 	// pages with more detail (the session is loaded for these paths).
-	mux.HandleFunc("GET /{$}", s.handleHome)
+	mux.HandleFunc("GET /{$}", s.handleCalendar)
+	mux.HandleFunc("GET /calendar", s.handleCalendar)
 	mux.HandleFunc("GET /calendar/{id}", s.handleBookingShow)
+	mux.HandleFunc("GET /calendar/by-source/{source}/{source_id}", s.handleBookingBySource)
 
 	auth("GET /account", s.handleAccount)
 	auth("POST /account/password", s.handleAccountPassword)
@@ -80,6 +82,12 @@ func (s *Server) routes() http.Handler {
 	admin("POST /admin/connections/{id}/test", s.handleConnectionTest)
 	admin("POST /admin/connections/{id}/keep", s.handleConnectionKeep)
 	admin("POST /admin/connections/{id}/clear", s.handleConnectionClear)
+	admin("GET /admin/tokens", s.handleTokens)
+	admin("POST /admin/tokens", s.handleTokenCreate)
+	admin("POST /admin/tokens/{id}/private", s.handleTokenPrivate)
+	admin("POST /admin/tokens/{id}/delete", s.handleTokenDelete)
+
+	s.apiRoutes(mux)
 
 	mux.HandleFunc("/", s.notFound)
 
@@ -265,6 +273,22 @@ func (s *Server) isHTTPS(r *http.Request) bool {
 		return true
 	}
 	return s.cfg.TrustProxy && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+// baseURL is this app's address as the browser sees it, for feed links.
+func (s *Server) baseURL(r *http.Request) string {
+	scheme := "http"
+	if s.isHTTPS(r) {
+		scheme = "https"
+	}
+	host := r.Host
+	if s.cfg.TrustProxy {
+		if h := r.Header.Get("X-Forwarded-Host"); h != "" {
+			host, _, _ = strings.Cut(h, ",")
+			host = strings.TrimSpace(host)
+		}
+	}
+	return scheme + "://" + host
 }
 
 func (s *Server) clientIP(r *http.Request) string {

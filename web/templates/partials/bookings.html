@@ -1,16 +1,16 @@
-{{/* One booking in a list, with the visibility rules: people who can't see
-     it in full get only its rooms and times. dict "B" booking "User" user */}}
-{{define "booking-item"}}
-  {{if canSee .B .User}}
-    <div class="cal-item">
-      <span class="cal-item__when">{{.B.ShortWhen}}</span>
-      <a class="cal-item__title" href="/calendar/{{.B.ID}}">{{.B.Title}}</a>
-      {{if .B.Kind}}<span class="cal-item__kind muted">{{.B.Kind}}</span>{{end}}
-      {{with .B.RoomNames}}<span class="muted">{{.}}</span>{{end}}
-      {{if eq .B.Status "tentative"}}<span class="badge badge--warn">Tentative</span>{{end}}
-      {{if eq .B.Status "cancelled"}}<span class="badge badge--alert">Cancelled</span>{{end}}
-    </div>
+{{/* One booking on one day of the calendar: dict "I" calItem "User" user.
+     Busy items carry only rooms and times (the store blanks the rest). */}}
+{{define "cal-item"}}
+  {{if .I.Busy}}
+    <p class="cal-item cal-item--busy">{{.I.BusyText}}</p>
   {{else}}
-    <p class="cal-item cal-item--busy">{{with .B.RoomNames}}{{.}} unavailable{{else}}Busy{{end}} · {{.B.ShortWhen}}</p>
+    <div class="cal-item">
+      <span class="cal-item__when">{{.I.When}}</span>
+      <a class="cal-item__title" href="/calendar/{{.I.ID}}">{{.I.Title}}</a>
+      {{if eq .I.Status "tentative"}}<span class="badge badge--warn">Tentative</span>{{end}}
+      {{if .I.Kind}}<span class="cal-item__kind muted">{{.I.Kind}}</span>{{end}}
+      {{with .I.RoomNames}}<span class="cal-item__rooms muted">{{.}}</span>{{end}}
+      {{if and .User .I.URL}}<a class="cal-item__inside small" href="{{.I.URL}}">Open in the {{source .I.Source}}</a>{{end}}
+    </div>
   {{end}}
 {{end}}

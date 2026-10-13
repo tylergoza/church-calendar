@@ -46,6 +46,19 @@ Each role includes the ones before it.
 
 Visitors (not signed in) see the public calendar.
 
+## Reading the calendar from elsewhere
+
+- `/calendar.ics` is the public feed (no token): public bookings, and busy
+  times for the rest. Anyone can subscribe from the calendar page.
+- The read API is the event planner's, plus `source`, so the church website
+  only changes the address and token: `GET /api/v1/events`,
+  `/api/v1/events/{id}` and `/api/v1/events.ics` (which also takes
+  `?token=`), with `from`, `to` and `room`. An admin makes read tokens
+  (`cal_…`) on **API tokens**; one with "Can see private events" also gets
+  private bookings in full. Locked bookings are only ever busy.
+- `/calendar/by-source/{source}/{id}` sends the apps' old calendar links to
+  the booking they pushed.
+
 ## Configuration
 
 Set with a flag or an environment variable. Flags go **before** any command.

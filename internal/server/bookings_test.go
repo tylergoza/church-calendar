@@ -88,8 +88,9 @@ func TestBookingVisibilityAndConflicts(t *testing.T) {
 	if !strings.Contains(home, "Choir concert") || strings.Contains(home, "Elders meeting") || !strings.Contains(home, "Lifecenter unavailable") {
 		t.Errorf("visitor front page:\n%s", home)
 	}
-	if body := c.get("/calendar/1", 200); strings.Contains(body, "Elders meeting") || !strings.Contains(body, "Lifecenter unavailable") {
-		t.Error("visitors should only see that the room is busy")
+	// A booking they'd only see as busy isn't there for them at all.
+	if body := c.get("/calendar/1", 404); strings.Contains(body, "Elders meeting") || strings.Contains(body, "Lifecenter") {
+		t.Error("visitors shouldn't find a private booking's page")
 	}
 	// Members see private bookings in full, but no clashes or edit link.
 	mel := c.as("mel")

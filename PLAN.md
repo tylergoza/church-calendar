@@ -5,7 +5,7 @@ event, rehearsal, meeting and room booking on one calendar, with room
 conflicts caught across all the apps. People (inside or outside the church)
 can also ask for a room here.
 
-Status: step 2 (rooms and hand-made bookings) built (2026-10-12).
+Status: step 3 (public calendar and feeds) built (2026-10-13).
 
 ## The idea in one paragraph
 
@@ -163,7 +163,6 @@ CREATE TABLE tokens (
     hash        TEXT NOT NULL UNIQUE,      -- sha256, as in the event planner
     prefix      TEXT NOT NULL,
     last_used   TEXT,
-    revoked_at  TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 ```
@@ -318,13 +317,13 @@ Each step is a working app; stop after any of them.
 - [x] Tests: overlap rules (all-day vs timed, multi-day, cancelled ignored, unknown rooms ignored)
 
 ### 3. Public calendar and feeds
-- [ ] Move the event planner's calendar templates, CSS and controllers here (month grid + agenda), add the source filter
-- [ ] `/calendar/{id}` with the visibility rules
-- [ ] `/calendar/by-source/{source}/{source_id}` redirects to that booking's page (the apps' old `/calendar/{id}` links land here)
-- [ ] `/calendar.ics`, 5-minute cache
-- [ ] Read API `/api/v1/events…` with the event planner's JSON shape plus `source`
-- [ ] Read tokens at `/admin/tokens`
-- [ ] Tests: visibility table above, one test per cell
+- [x] Move the event planner's calendar templates, CSS and controllers here (month grid + agenda), add the source filter. Busy blocks carry no source, so picking a source leaves them out. `/rooms/{id}` now has a week view
+- [x] `/calendar/{id}` with the visibility rules: visitors get 404 for anything they'd only see as busy (as the event planner does); signed-in people reach busy ones (from conflicts) with only rooms and times
+- [x] `/calendar/by-source/{source}/{source_id}` redirects to that booking's page (the apps' old `/calendar/{id}` links land here)
+- [x] `/calendar.ics`, 5-minute cache (`Cache-Control`, as the event planner)
+- [x] Read API `/api/v1/events…` with the event planner's JSON shape plus `source` (left out for busy entries), and `?room=`
+- [x] Read tokens at `/admin/tokens`. Revoking deletes the token (the unused `revoked_at` column is gone from 001). Source tokens are refused by the read API with 403
+- [x] Tests: visibility table above, one test per cell (plus the visitor feed)
 
 ### 4. Room requests
 - [ ] `/request` form with live availability (Stimulus controller hitting a same-origin JSON endpoint)

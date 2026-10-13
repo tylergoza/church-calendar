@@ -1,0 +1,68 @@
+{{define "content"}}
+<div class="page-head">
+  <div><h1>API tokens</h1><p class="muted">Tokens let another site or app read events. A token sees public events and when rooms are busy; tick "Can see private events" to show private events' details too (never locked ones). Apps that send their events here get their own tokens with the push API.</p></div>
+</div>
+
+{{if .NewToken}}
+<div class="card narrow">
+  <h2 class="section__title">Your new token</h2>
+  <p>Copy it now and keep it somewhere safe, like the other site's settings. It won't be shown again; if it's lost, revoke it and make another.</p>
+  <p><code class="token">{{.NewToken}}</code></p>
+  <p class="muted small">The app sends it with each request as <code>Authorization: Bearer {{.NewToken}}</code>. A calendar app can subscribe to <code>{{.APIBase}}/events.ics?token={{.NewToken}}</code>.</p>
+</div>
+{{end}}
+
+{{if .Tokens}}
+<section class="section">
+<div class="table-wrap">
+  <table class="table table--stack">
+    <thead><tr><th>Used by</th><th>Token</th><th>Private events</th><th>Made</th><th>Last used</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+      {{range .Tokens}}
+        <tr>
+          <td data-label="Used by"><strong>{{.Name}}</strong></td>
+          <td data-label="Token"><code>{{.Prefix}}…</code></td>
+          <td data-label="Private events">{{if .SeePrivate}}Yes{{else}}<span class="muted">No</span>{{end}}</td>
+          <td data-label="Made"><span class="small">{{fmtTime .CreatedAt}}{{with .CreatedBy}} by {{.}}{{end}}</span></td>
+          <td data-label="Last used"><span class="small">{{if .LastUsed}}{{fmtTime .LastUsed}}{{else}}<span class="muted">Never</span>{{end}}</span></td>
+          <td class="actions">
+            <form method="post" action="/admin/tokens/{{.ID}}/private" class="inline-form">
+              {{template "csrf" $.CSRF}}
+              <input type="hidden" name="private" value="{{if .SeePrivate}}0{{else}}1{{end}}">
+              <button type="submit" class="btn btn--ghost btn--sm">{{if .SeePrivate}}Hide private events{{else}}Show private events{{end}}</button>
+            </form>
+            {{template "delete-button" (dict "Action" (printf "/admin/tokens/%d/delete" .ID) "CSRF" $.CSRF "Label" "Revoke" "Confirm" (printf "Revoke the token for %s? It will stop working right away." .Name))}}
+          </td>
+        </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+</section>
+{{end}}
+
+<div class="card narrow">
+  <h2 class="section__title">Make a token</h2>
+  {{template "errors" .Errors}}
+  <form method="post" action="/admin/tokens" class="form">
+    {{template "csrf" .CSRF}}
+    <div class="field">
+      <label for="name">What will use it</label>
+      <input id="name" name="name" value="{{.Name}}" required maxlength="100" placeholder="e.g. Church website">
+    </div>
+    <label class="check"><input type="checkbox" name="see_private" value="1" {{if .Private}}checked{{end}}> Can see private events</label>
+    <div class="form__actions"><button type="submit" class="btn btn--primary">Make token</button></div>
+  </form>
+</div>
+
+<div class="card narrow">
+  <h2 class="section__title">What it can read</h2>
+  <p class="muted small">JSON from <code>{{.APIBase}}</code>, with <code>from</code> and <code>to</code> dates (YYYY-MM-DD, at most 400 days apart) and an optional <code>room</code>:</p>
+  <ul class="plain-list small">
+    <li><code>GET /events</code>: events in the range, each with its <code>source</code> (<code>events</code>, <code>productions</code>, <code>calendar</code> or <code>request</code>). Ones the token can't see show as busy, with only their rooms and times.</li>
+    <li><code>GET /events/{id}</code>: one event the token can see.</li>
+    <li><code>GET /events.ics</code>: the same as a calendar feed; it also takes <code>?token=</code>.</li>
+  </ul>
+  <p class="muted small">No token is needed for <code>{{.CalendarURL}}</code>, the public calendar feed: public events, and busy times for the rest.</p>
+</div>
+{{end}}
