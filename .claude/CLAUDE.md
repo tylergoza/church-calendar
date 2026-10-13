@@ -25,7 +25,9 @@ Ansible, calendar views) from `../event_planning`, the newest sibling.
   and `tentative` (pencilled in) block rooms exactly like `confirmed`;
   only `cancelled` frees them. Members' requests are never pending: free
   is booked, busy is refused. Busy checks and conflicts match a room's
-  family (the room, the buildings it's in, the rooms inside it).
+  family (the room, the buildings it's in, the rooms inside it), where a
+  building and a room inside only count together if the inner room is
+  bookable. A bookable building is booked whole; it doesn't list its rooms.
 - Visibility rules must match the event planner's (public / private /
   locked = busy). Never show more than rooms and times for busy blocks.
 - Cookies `cal_*`, tokens `cal_…`; local port 8120 (tracker 8080, planner
@@ -42,3 +44,4 @@ Ansible, calendar views) from `../event_planning`, the newest sibling.
   other apps are admin settings on `/admin/connections`; env vars override
   them per whole connection. Secrets encrypted with `secrets.key`.
 - `BOOKING_PLAN.md`: this app's part of bookable rooms / pending bookings / unscheduled events (design in `../.claude/plans/bookable-rooms-and-pending-bookings.md`). Tick its checkboxes as steps are done.
+- `EQUIPMENT_PLAN.md`: this app's part of equipment and services (Sound, Lighting) asked for with room bookings (design in `../.claude/plans/bookable-equipment.md`). Tick its checkboxes as steps are done.

@@ -5,7 +5,7 @@ The cross-app design is in
 calendar's part. Everything still works with the calendar alone: without
 the tracker, rooms (and their building) are set by hand.
 
-Status: built 2026-10-13. Imported rooms follow the tracker's `bookable` once `../maintenance_tracking/BOOKING_PLAN.md` step 1 is deployed; until then the calendar keeps its own flags.
+Status: built 2026-10-13, except step 3a (only bookable rooms share busy time with their building), added after. Imported rooms follow the tracker's `bookable` once `../maintenance_tracking/BOOKING_PLAN.md` step 1 is deployed; until then the calendar keeps its own flags.
 
 From the first deploy on, `001_initial.sql` is frozen, so all of this goes
 in new migrations (`002_…`). Changing a CHECK needs a table rebuild with
@@ -21,7 +21,7 @@ foreign keys off (the runner's `noForeignKeys` flag, `internal/store/store.go`).
 | Signed-in member | Can withdraw while waiting | Can **change** or **cancel** their bookings |
 | Schedulers/admins | Edit or hard-delete hand-made bookings | Also **Cancel** (kept, with a note to the person) any hand-made or request booking |
 | Bookable | Checkbox in the calendar | From the tracker for imported rooms, sync adds bookable places by itself |
-| Buildings | Just another room | A building is busy when a room in it is, and the other way round |
+| Buildings | Just another room | A building is busy when a bookable room in it is, and the other way round. Rooms that aren't bookable don't count |
 
 ## Steps
 
@@ -53,6 +53,16 @@ Needs `../maintenance_tracking/BOOKING_PLAN.md` step 1 (`bookable` in `GET /api/
 - [x] Building tree in busy checks: a recursive CTE `room_family(room_id, related_id)` (the room, its ancestors and its descendants). `spansSQL` users and `Store.conflicts` match on the family instead of the same `room_id`. Booking "Main building" makes "Nursery" busy and the other way round; two rooms in one building do not clash with each other
 - [x] `/request` lists bookable rooms grouped under their building; a building that is bookable can be picked whole
 - [x] Tests: sync adds bookable, updates flags/names/parents, never adds unbookable, doesn't archive on a failed call; family conflicts both ways; siblings don't clash; hand-made parent
+
+### 3a. Only bookable rooms share busy time with their building
+Asked 2026-10-13, after step 3 was built. A bookable building is for
+booking the building whole. Booking it makes the rooms inside busy only
+where the room or area is bookable itself; a room only the planners use
+doesn't clash with its building.
+- [ ] `familySQL` (`internal/store/conflicts.go`): a building-and-room pair is in `room_family` only when the inner room is `bookable`. The room itself always stays in its own family. Used as-is by `spansSQL` users, `Store.conflicts` and the `room=` read query (`internal/store/push.go`)
+- [ ] The intermediate rooms don't have to be bookable: a bookable room in an unbookable area still pairs with its bookable building
+- [ ] `/request` already lists only bookable rooms; check a bookable building with no bookable rooms shows as one loose choice, not an empty group
+- [ ] Tests: building booking makes a bookable room inside busy and the other way round; a planner booking in an unbookable room inside doesn't block the building, nor the building it; unbookable middle area; turning a room's bookable off (by hand or sync) drops the clash
 
 ### 4. People change or cancel their own bookings
 - [x] `/my/bookings` (signed-in): their requests and bookings, upcoming first, with status. Linked from the menu and from `/request`

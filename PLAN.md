@@ -321,7 +321,7 @@ after **Test sign-in**):
   there's an SMTP setup the other apps can share.
 - Two-way sync with Google/Outlook calendars. The `.ics` feed covers
   reading.
-- Booking equipment. That's the planners' "needs" and the tracker.
+- Booking equipment for the planners. Their "needs" stay in the planners. Equipment asked for with a room request or hand-made booking is planned in `EQUIPMENT_PLAN.md`.
 
 ## Steps
 
