@@ -12,11 +12,13 @@
     {{if $q.ExpectedCount}}<div><dt>People</dt><dd>{{$q.ExpectedCount}}</dd></div>{{end}}
   </dl>
   {{if eq $q.Status "waiting"}}
-    <p>A scheduler hasn't answered yet. Check back here.</p>
+    <p>The rooms are held for you (pending) while a scheduler looks at it. A scheduler hasn't answered yet. Check back here.</p>
   {{else if eq $q.Status "approved"}}
-    <p><strong>Approved.</strong> The rooms are booked for you.{{if and .User $q.BookingID}} <a href="/calendar/{{$q.BookingID}}">See the booking</a>.{{end}}</p>
+    <p><strong>{{if $q.DecidedBy}}Approved.{{else}}Booked.{{end}}</strong> The rooms are booked for you.{{if and .User $q.BookingID}} <a href="/calendar/{{$q.BookingID}}">See the booking</a>.{{end}}</p>
   {{else if eq $q.Status "declined"}}
     <p><strong>Sorry, this request was turned down.</strong></p>
+  {{else if eq $q.Status "cancelled"}}
+    <p><strong>This booking was cancelled by the church.</strong></p>
   {{else}}
     <p>You withdrew this request.</p>
   {{end}}
@@ -27,7 +29,24 @@
   <p class="muted small">It's the only way back to this page{{if not .User}} without signing in{{end}}. Anyone with it can see this request.</p>
   <code class="token">{{.Link}}</code>
 </div>
-{{if $q.Waiting}}
+{{if .EventBooking}}
+<div class="card narrow">
+  <p>This booking is now part of an event, so it's changed there. <a href="/calendar/{{.EventBooking.ID}}">See the event on the calendar</a>.</p>
+</div>
+{{else if .CanChange}}
+<div class="card narrow">
+  <h2 class="section__title">Change or cancel</h2>
+  <p class="muted small">Changing the times or rooms checks they're free first.</p>
+  <div class="form__actions">
+    <a class="btn btn--ghost" href="/request/{{$q.ID}}/edit">Edit</a>
+    <form method="post" action="/request/{{$q.ID}}/cancel" class="inline-form"
+          data-controller="confirm" data-confirm-message-value="Cancel this booking? The rooms are freed." data-action="submit->confirm#check">
+      {{template "csrf" .CSRF}}
+      <button type="submit" class="btn btn--danger-ghost btn--sm">Cancel booking</button>
+    </form>
+  </div>
+</div>
+{{else if and $q.Waiting (not .Owner)}}
 <div class="card narrow danger-zone">
   <h2 class="section__title">Don't need it any more?</h2>
   <form method="post" action="/request/{{$q.ID}}/withdraw" class="inline-form"

@@ -15,7 +15,8 @@
 <div class="card">
   <dl class="details">
     <div><dt>Capacity</dt><dd>{{if .Room.Capacity}}{{.Room.Capacity}}{{else}}<span class="muted">Not set</span>{{end}}</dd></div>
-    <div><dt>Requests</dt><dd>{{if not .Room.Bookable}}Not offered on the request form{{else if .Room.NeedsApproval}}Wait for a scheduler{{else}}Book straight away{{end}}</dd></div>
+    <div><dt>Requests</dt><dd>{{if .Room.Bookable}}On the request form{{else}}Not offered on the request form{{end}}{{if .Room.FromTracker}} <span class="muted small">(set in the tracker{{with .TrackerURL}}: <a href="{{.}}" rel="noopener">see the place</a>{{end}})</span>{{end}}</dd></div>
+    {{with .Inside}}<div><dt>Inside</dt><dd><a href="/rooms/{{.ID}}">{{.Name}}</a></dd></div>{{end}}
   </dl>
   {{with .Room.Notes}}<p>{{range lines .}}{{.}}<br>{{end}}</p>{{end}}
 </div>

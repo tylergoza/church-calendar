@@ -316,6 +316,13 @@ func (s *Server) redirectAfterConnectionChange(w http.ResponseWriter, r *http.Re
 			say("error", d.Name+": "+err.Error())
 			return
 		}
+		if d.ID == "tracker" {
+			// A working tracker connection is a good moment to catch up.
+			if res, err := s.SyncTracker(ctx); err == nil && len(res.Added) > 0 {
+				say("success", "Connected to the maintenance tracker. Added "+strings.Join(res.Added, ", ")+".")
+				return
+			}
+		}
 		say("success", "Connected to the "+strings.ToLower(d.Name)+".")
 	}
 }

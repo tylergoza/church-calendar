@@ -308,10 +308,10 @@ func buildICS(calName, host, baseURL string, list []store.CalendarEntry, now tim
 			if e.Description != "" {
 				line("DESCRIPTION:" + escapeICS(e.Description))
 			}
-			if e.Status == "tentative" {
-				line("STATUS:TENTATIVE")
-			}
 			line("URL:" + baseURL + bookingURL(e.ID))
+		}
+		if e.NotYet() {
+			line("STATUS:TENTATIVE")
 		}
 		line("END:VEVENT")
 	}

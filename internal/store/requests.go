@@ -1,32 +1,40 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"strings"
 	"time"
 )
 
 // ErrAlreadyDecided is returned when a request has already been approved,
-// declined or withdrawn.
+// declined, withdrawn or cancelled.
 var ErrAlreadyDecided = errors.New("that request has already been answered")
 
+// ErrRoomsBusy is returned when a member's booking would clash: nothing is
+// saved. The busy bookings come back with it.
+var ErrRoomsBusy = errors.New("some of those rooms are taken then")
+
 // Request statuses.
-var RequestStatuses = []string{"waiting", "approved", "declined", "withdrawn"}
+var RequestStatuses = []string{"waiting", "approved", "declined", "withdrawn", "cancelled"}
 
 var requestStatusLabels = map[string]string{
-	"waiting": "Waiting", "approved": "Approved", "declined": "Declined", "withdrawn": "Withdrawn",
+	"waiting": "Waiting", "approved": "Approved", "declined": "Declined", "withdrawn": "Withdrawn", "cancelled": "Cancelled",
 }
 
 func RequestStatusLabel(s string) string { return requestStatusLabels[s] }
 
-// Request is someone asking for a room. Approving it makes a booking with
-// source "request". Code is the random part of the status link the person
-// is given, so they can check back without an account.
+// Request is someone asking for a room. A visitor's request has a pending
+// booking (source "request") from the start, which approving confirms. A
+// member's is booked (confirmed) straight away. Code is the random part of
+// the status link the person is given, so they can check back without an
+// account.
 type Request struct {
 	ID            int64
 	Code          string
 	Name          string
-	Contact       string // email or phone
+	Contact       string // email, optional
+	Phone         string // required from visitors; never leaves the calendar
 	UserID        int64  // the member who asked; 0 for a visitor
 	Title         string
 	StartsOn      string
@@ -37,7 +45,7 @@ type Request struct {
 	Details       string
 	Status        string
 	Answer        string // note back to the person
-	BookingID     int64  // the booking approving it made; 0 if none (or deleted)
+	BookingID     int64  // its booking (pending until approved); 0 if none (or deleted)
 	DecidedBy     int64  // 0 for one booked straight away
 	CreatedAt     string
 	Rooms         []BookingRoom
@@ -53,7 +61,7 @@ func (r Request) RoomNames() string { return r.span().RoomNames() }
 func (r Request) RoomIDs() []int64  { return r.span().RoomIDs() }
 func (r Request) Waiting() bool     { return r.Status == "waiting" }
 
-const requestCols = `id, code, name, contact, COALESCE(user_id, 0), title, starts_on, start_time, ends_on, end_time,
+const requestCols = `id, code, name, contact, phone, COALESCE(user_id, 0), title, starts_on, start_time, ends_on, end_time,
 	COALESCE(expected_count, 0), details, status, answer, COALESCE(booking_id, 0), COALESCE(decided_by, 0), created_at`
 
 func (s *Store) queryRequests(query string, args ...any) ([]Request, error) {
@@ -65,7 +73,7 @@ func (s *Store) queryRequests(query string, args ...any) ([]Request, error) {
 	idx := map[int64]int{}
 	for rows.Next() {
 		var r Request
-		if err := rows.Scan(&r.ID, &r.Code, &r.Name, &r.Contact, &r.UserID, &r.Title, &r.StartsOn, &r.StartTime,
+		if err := rows.Scan(&r.ID, &r.Code, &r.Name, &r.Contact, &r.Phone, &r.UserID, &r.Title, &r.StartsOn, &r.StartTime,
 			&r.EndsOn, &r.EndTime, &r.ExpectedCount, &r.Details, &r.Status, &r.Answer, &r.BookingID, &r.DecidedBy, &r.CreatedAt); err != nil {
 			rows.Close()
 			return nil, err
@@ -143,19 +151,14 @@ func (s *Store) RequestForBooking(bookingID int64) (int64, error) {
 	return id, err
 }
 
-// CreateRequest saves a new waiting request in the given rooms and fills
-// in its ID and code.
-func (s *Store) CreateRequest(r *Request, roomIDs []int64) error {
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	r.Code, r.Status = RandomToken(), "waiting"
-	res, err := tx.Exec(`INSERT INTO requests (code, name, contact, user_id, title, starts_on, start_time, ends_on, end_time,
-		expected_count, details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.Code, r.Name, r.Contact, nullInt(r.UserID), r.Title, r.StartsOn, r.StartTime, r.EndsOn, r.EndTime,
-		nullInt(int64(r.ExpectedCount)), r.Details)
+// insertRequest saves a new request with the given status and its rooms,
+// and fills in its ID, code and status.
+func insertRequest(tx *sql.Tx, r *Request, status string, roomIDs []int64) error {
+	r.Code, r.Status = RandomToken(), status
+	res, err := tx.Exec(`INSERT INTO requests (code, name, contact, phone, user_id, title, starts_on, start_time, ends_on, end_time,
+		expected_count, details, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.Code, r.Name, r.Contact, r.Phone, nullInt(r.UserID), r.Title, r.StartsOn, r.StartTime, r.EndsOn, r.EndTime,
+		nullInt(int64(r.ExpectedCount)), r.Details, status)
 	if err != nil {
 		return err
 	}
@@ -167,24 +170,87 @@ func (s *Store) CreateRequest(r *Request, roomIDs []int64) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// insertRequestBooking makes the booking (source "request", private) for
+// request r in its rooms and points the request at it.
+func insertRequestBooking(tx *sql.Tx, r *Request, status string, createdBy int64) error {
+	res, err := tx.Exec(`INSERT INTO bookings (source, title, starts_on, start_time, ends_on, end_time, visibility, status, created_by)
+		VALUES (?, ?, ?, ?, ?, ?, 'private', ?, ?)`, SourceRequest, r.Title, r.StartsOn, r.StartTime, r.EndsOn, r.EndTime, status, nullInt(createdBy))
+	if err != nil {
+		return err
+	}
+	if r.BookingID, err = res.LastInsertId(); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO booking_rooms (booking_id, room_id, room_name)
+		SELECT ?, rm.id, rm.name FROM request_rooms rr JOIN rooms rm ON rm.id = rr.room_id WHERE rr.request_id = ?`, r.BookingID, r.ID); err != nil {
+		return err
+	}
+	_, err = tx.Exec(`UPDATE requests SET booking_id = ? WHERE id = ?`, r.BookingID, r.ID)
+	return err
+}
+
+// CreateRequest saves a visitor's request in the given rooms, waiting for
+// a scheduler, with its pending booking so the rooms are blocked from now
+// on. It fills in the request's ID, code and booking.
+func (s *Store) CreateRequest(r *Request, roomIDs []int64) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := insertRequest(tx, r, "waiting", roomIDs); err != nil {
+		return err
+	}
+	if err := insertRequestBooking(tx, r, "pending", r.UserID); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
-// ApproveRequest books a waiting request: a booking with source "request"
-// in its rooms, with the given visibility. by is the scheduler (0 when it
-// was booked straight away, and the booking is then the asker's). Refused
-// with ErrAlreadyDecided unless the request is still waiting, so
-// approving twice makes one booking.
+// BookRequest books a signed-in member's request straight away: the
+// request is approved (by nobody) and its booking confirmed, made by the
+// member. If any room is busy then (pending and pencilled-in bookings
+// count) nothing is saved and the clashes come back with ErrRoomsBusy.
+// The check runs inside the transaction, so two members can't take the
+// same slot at once.
+func (s *Store) BookRequest(r *Request, roomIDs []int64) (map[int64][]Booking, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	busy, err := busyInRooms(tx, roomIDs, r.StartsOn, r.StartTime, r.EndsOn, r.EndTime, 0)
+	if err != nil {
+		return nil, err
+	}
+	if len(busy) > 0 {
+		return busy, ErrRoomsBusy
+	}
+	if err := insertRequest(tx, r, "approved", roomIDs); err != nil {
+		return nil, err
+	}
+	if err := insertRequestBooking(tx, r, "confirmed", r.UserID); err != nil {
+		return nil, err
+	}
+	return nil, tx.Commit()
+}
+
+// ApproveRequest confirms a waiting request's booking, with the given
+// visibility. by is the scheduler. A request with no booking (it was
+// deleted) gets a new one. Refused with ErrAlreadyDecided unless the
+// request is still waiting, so approving twice changes nothing.
 func (s *Store) ApproveRequest(id, by int64, answer, visibility string) (int64, error) {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
-	var title, startsOn, startTime, endsOn, endTime string
-	var userID int64
-	err = tx.QueryRow(`SELECT title, starts_on, start_time, ends_on, end_time, COALESCE(user_id, 0) FROM requests
-		WHERE id = ?`, id).Scan(&title, &startsOn, &startTime, &endsOn, &endTime, &userID)
+	var r Request
+	err = tx.QueryRow(`SELECT id, title, starts_on, start_time, ends_on, end_time, COALESCE(user_id, 0), COALESCE(booking_id, 0)
+		FROM requests WHERE id = ?`, id).Scan(&r.ID, &r.Title, &r.StartsOn, &r.StartTime, &r.EndsOn, &r.EndTime, &r.UserID, &r.BookingID)
 	if err != nil {
 		return 0, notFound(err)
 	}
@@ -196,56 +262,64 @@ func (s *Store) ApproveRequest(id, by int64, answer, visibility string) (int64, 
 	if n, _ := res.RowsAffected(); n == 0 {
 		return 0, ErrAlreadyDecided
 	}
-	createdBy := by
-	if createdBy == 0 {
-		createdBy = userID
-	}
 	vis := "private"
 	if visibility == "public" {
 		vis = "public"
 	}
-	res, err = tx.Exec(`INSERT INTO bookings (source, title, starts_on, start_time, ends_on, end_time, visibility, status, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed', ?)`, SourceRequest, title, startsOn, startTime, endsOn, endTime, vis, nullInt(createdBy))
-	if err != nil {
+	createdBy := r.UserID
+	if createdBy == 0 {
+		createdBy = by
+	}
+	if r.BookingID == 0 {
+		if err := insertRequestBooking(tx, &r, "confirmed", createdBy); err != nil {
+			return 0, err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE bookings SET status = 'confirmed', visibility = ?, created_by = COALESCE(created_by, ?),
+		updated_at = datetime('now') WHERE id = ?`, vis, nullInt(createdBy), r.BookingID); err != nil {
 		return 0, err
 	}
-	bookingID, err := res.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-	if _, err := tx.Exec(`INSERT INTO booking_rooms (booking_id, room_id, room_name)
-		SELECT ?, rm.id, rm.name FROM request_rooms rr JOIN rooms rm ON rm.id = rr.room_id WHERE rr.request_id = ?`, bookingID, id); err != nil {
-		return 0, err
-	}
-	if _, err := tx.Exec(`UPDATE requests SET booking_id = ? WHERE id = ?`, bookingID, id); err != nil {
-		return 0, err
-	}
-	return bookingID, tx.Commit()
+	return r.BookingID, tx.Commit()
 }
 
-// DeclineRequest turns down a waiting request with a note to the person.
+// DeclineRequest turns down a waiting request with a note to the person,
+// and frees its rooms.
 func (s *Store) DeclineRequest(id, by int64, answer string) error {
-	return s.closeRequest(`UPDATE requests SET status = 'declined', answer = ?, decided_by = ? WHERE id = ? AND status = 'waiting'`,
-		id, answer, nullInt(by), id)
+	return s.closeRequest(id, `UPDATE requests SET status = 'declined', answer = ?, decided_by = ? WHERE id = ? AND status = 'waiting'`,
+		answer, nullInt(by), id)
 }
 
-// WithdrawRequest is the person taking back a request that still waits.
+// WithdrawRequest is the person taking back a request that still waits,
+// which frees its rooms.
 func (s *Store) WithdrawRequest(id int64) error {
-	return s.closeRequest(`UPDATE requests SET status = 'withdrawn' WHERE id = ? AND status = 'waiting'`, id, id)
+	return s.closeRequest(id, `UPDATE requests SET status = 'withdrawn' WHERE id = ? AND status = 'waiting'`, id)
 }
 
-func (s *Store) closeRequest(query string, id int64, args ...any) error {
-	res, err := s.DB.Exec(query, args...)
+// closeRequest runs query (which must only match a waiting request) and
+// cancels the request's booking with it.
+func (s *Store) closeRequest(id int64, query string, args ...any) error {
+	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n > 0 {
-		return nil
-	}
-	if _, err := s.GetRequest(id); err != nil {
+	defer tx.Rollback()
+	res, err := tx.Exec(query, args...)
+	if err != nil {
 		return err
 	}
-	return ErrAlreadyDecided
+	if n, _ := res.RowsAffected(); n == 0 {
+		// One connection: ask inside the transaction, not s.DB.
+		var one int
+		if err := tx.QueryRow(`SELECT 1 FROM requests WHERE id = ?`, id).Scan(&one); err != nil {
+			return notFound(err)
+		}
+		return ErrAlreadyDecided
+	}
+	if _, err := tx.Exec(`UPDATE bookings SET status = 'cancelled', updated_at = datetime('now')
+		WHERE id = (SELECT booking_id FROM requests WHERE id = ?) AND source = ?`, id, SourceRequest); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // spanOf is a time block's start and end as text that compares, the same
@@ -272,6 +346,16 @@ func spanOf(startsOn, startTime, endsOn, endTime string) (start, end string) {
 // times in each of the rooms, keyed by room ID. Rooms that are free have
 // no key.
 func (s *Store) BusyInRooms(roomIDs []int64, startsOn, startTime, endsOn, endTime string) (map[int64][]Booking, error) {
+	return busyInRooms(s.DB, roomIDs, startsOn, startTime, endsOn, endTime, 0)
+}
+
+// BusyInRoomsExcept is BusyInRooms leaving out one booking, for moving a
+// booking without it clashing with itself.
+func (s *Store) BusyInRoomsExcept(except int64, roomIDs []int64, startsOn, startTime, endsOn, endTime string) (map[int64][]Booking, error) {
+	return busyInRooms(s.DB, roomIDs, startsOn, startTime, endsOn, endTime, except)
+}
+
+func busyInRooms(q querier, roomIDs []int64, startsOn, startTime, endsOn, endTime string, except int64) (map[int64][]Booking, error) {
 	out := map[int64][]Booking{}
 	if len(roomIDs) == 0 {
 		return out, nil
@@ -281,9 +365,11 @@ func (s *Store) BusyInRooms(roomIDs []int64, startsOn, startTime, endsOn, endTim
 		ids[i] = itoa(id)
 	}
 	start, end := spanOf(startsOn, startTime, endsOn, endTime)
-	rows, err := s.DB.Query(`WITH `+spansSQL+`
-		SELECT br.room_id, sp.id FROM spans sp JOIN booking_rooms br ON br.booking_id = sp.id
-		WHERE br.room_id IN (`+strings.Join(ids, ",")+`) AND sp.s < ? AND ? < sp.e`, end, start)
+	// A booking in the building, or in a room inside it, makes the room busy.
+	rows, err := q.Query(`WITH RECURSIVE `+familySQL+`, `+spansSQL+`
+		SELECT DISTINCT f.room_id, sp.id FROM spans sp JOIN booking_rooms br ON br.booking_id = sp.id
+		JOIN room_family f ON f.related_id = br.room_id
+		WHERE f.room_id IN (`+strings.Join(ids, ",")+`) AND sp.s < ? AND ? < sp.e AND sp.id <> ?`, end, start, except)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +392,7 @@ func (s *Store) BusyInRooms(roomIDs []int64, startsOn, startTime, endsOn, endTim
 	if err := rows.Err(); err != nil || len(all) == 0 {
 		return out, err
 	}
-	list, err := queryBookings(s.DB, `SELECT `+bookingCols+` FROM bookings WHERE id IN (`+strings.Join(all, ",")+`)
+	list, err := queryBookings(q, `SELECT `+bookingCols+` FROM bookings WHERE id IN (`+strings.Join(all, ",")+`)
 		ORDER BY starts_on, start_time <> '', start_time, id`)
 	if err != nil {
 		return nil, err

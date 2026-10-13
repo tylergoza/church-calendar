@@ -68,9 +68,9 @@ func pushJSON(day string, extra string) string {
 
 func TestPushIdempotentAndRooms(t *testing.T) {
 	c, st := newTestServer(t)
-	life := addRoom(t, st, "Lifecenter", true)
+	life := addRoom(t, st, "Lifecenter")
 	st.DB.Exec(`UPDATE rooms SET tracker_place_id = 41 WHERE id = ?`, life)
-	pav := addRoom(t, st, "Pavilion", true)
+	pav := addRoom(t, st, "Pavilion")
 	tok := sourceToken(t, st, "events", false)
 	day := soon(5)
 
@@ -185,7 +185,7 @@ func TestPushLockedHasNoDetails(t *testing.T) {
 
 func TestPushConflicts(t *testing.T) {
 	c, st := newTestServer(t)
-	hall := addRoom(t, st, "Hall", true)
+	hall := addRoom(t, st, "Hall")
 	day := soon(6)
 	book(t, st, store.Booking{Title: "Elders", Visibility: "private", StartsOn: day, StartTime: "18:00", EndTime: "19:00"}, hall)
 	book(t, st, store.Booking{Title: "Open night", Visibility: "public", StartsOn: day, StartTime: "19:30", EndTime: "21:00"}, hall)
@@ -223,7 +223,7 @@ func TestPushConflicts(t *testing.T) {
 
 func TestPushReplaces(t *testing.T) {
 	c, st := newTestServer(t)
-	hall := addRoom(t, st, "Hall", true)
+	hall := addRoom(t, st, "Hall")
 	day := soon(8)
 	tok := sourceToken(t, st, "events", false)
 
@@ -272,8 +272,8 @@ func TestPushReplaces(t *testing.T) {
 
 func TestAvailabilityRoomsAndSourceList(t *testing.T) {
 	c, st := newTestServer(t)
-	hall := addRoom(t, st, "Hall", true)
-	addRoom(t, st, "Kitchen", false)
+	hall := addRoom(t, st, "Hall")
+	addRoom(t, st, "Kitchen")
 	day := soon(4)
 	book(t, st, store.Booking{Title: "Elders", Visibility: "private", StartsOn: day, StartTime: "18:00"}, hall)
 	book(t, st, store.Booking{Title: "Gone", Visibility: "public", StartsOn: day, Status: "cancelled"}, hall)
@@ -300,7 +300,7 @@ func TestAvailabilityRoomsAndSourceList(t *testing.T) {
 
 	var rooms struct{ Rooms []apiRoomJSON }
 	c.apiDo("GET", "/api/v1/rooms", tok, "", 200, &rooms)
-	if len(rooms.Rooms) != 2 || rooms.Rooms[0].Name != "Hall" || !rooms.Rooms[0].NeedsApproval || rooms.Rooms[1].NeedsApproval {
+	if len(rooms.Rooms) != 2 || rooms.Rooms[0].Name != "Hall" || !rooms.Rooms[0].Bookable {
 		t.Fatalf("rooms %+v", rooms.Rooms)
 	}
 
@@ -348,7 +348,7 @@ func TestAppTokensAndConnectedApps(t *testing.T) {
 func TestMakeThisAnEvent(t *testing.T) {
 	env := map[string]string{"EVENTS_URL": "https://events.example.org"}
 	c, st := adminClient(t, Config{Env: func(k string) string { return env[k] }})
-	hall := addRoom(t, st, "Hall", true)
+	hall := addRoom(t, st, "Hall")
 	id := book(t, st, store.Booking{Title: "Choir & friends", StartsOn: soon(3), StartTime: "18:00", EndTime: "19:00"}, hall)
 	body := c.get(bookingURL(id), 200)
 	want := "https://events.example.org/events/new?end_time=19%3a00&amp;from_calendar=" + itoa(id)

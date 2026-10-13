@@ -139,3 +139,60 @@ func TestBookingConstraints(t *testing.T) {
 		t.Error("conflict_ok row should go with its booking")
 	}
 }
+
+// TestMigration002 runs 001 → 002 on a database holding rows: every waiting
+// request gets a pending booking in its rooms, and nothing else changes.
+func TestMigration002(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	st, err := openAt(path, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO users (id, username) VALUES (1, 'mel')`,
+		`INSERT INTO rooms (id, name, needs_approval) VALUES (1, 'Hall', 1), (2, 'Kitchen', 0)`,
+		`INSERT INTO bookings (id, source, title, starts_on, start_time, status) VALUES (1, 'calendar', 'Choir', '2026-11-07', '17:00', 'tentative')`,
+		`INSERT INTO booking_rooms (booking_id, room_id, room_name) VALUES (1, 1, 'Hall')`,
+		`INSERT INTO requests (id, code, name, contact, title, starts_on, start_time, end_time) VALUES (1, 'c1', 'Jo', 'jo@example.org', 'Movie night', '2026-11-08', '18:00', '21:00')`,
+		`INSERT INTO requests (id, code, name, contact, user_id, title, starts_on) VALUES (2, 'c2', 'Mel', 'mel', 1, 'Prayer', '2026-11-09')`,
+		`INSERT INTO requests (id, code, name, contact, title, starts_on, status) VALUES (3, 'c3', 'Al', '555', 'Old', '2026-01-01', 'declined')`,
+		`INSERT INTO request_rooms (request_id, room_id) VALUES (1, 1), (1, 2), (2, 2), (3, 1)`,
+	} {
+		if _, err := st.DB.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	st.Close()
+
+	st, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if b, err := st.GetBooking(1); err != nil || b.Title != "Choir" || b.Status != "tentative" || b.RoomNames() != "Hall" {
+		t.Errorf("old booking = %+v, %v", b, err)
+	}
+	r1, _ := st.GetRequest(1)
+	if r1.Status != "waiting" || r1.BookingID == 0 || r1.Contact != "jo@example.org" || r1.Phone != "" {
+		t.Fatalf("request 1 = %+v", r1)
+	}
+	b, _ := st.GetBooking(r1.BookingID)
+	if b.Status != "pending" || b.Source != SourceRequest || b.Title != "Movie night" || b.Visibility != "private" ||
+		b.CreatedBy != 0 || b.StartTime != "18:00" || b.EndTime != "21:00" || b.RoomNames() != "Hall, Kitchen" {
+		t.Errorf("pending booking 1 = %+v", b)
+	}
+	r2, _ := st.GetRequest(2)
+	if b, _ := st.GetBooking(r2.BookingID); r2.Status != "waiting" || b.Status != "pending" || b.CreatedBy != 1 || b.Title != "Prayer" || b.RoomNames() != "Kitchen" {
+		t.Errorf("member's waiting request = %+v, booking %+v", r2, b)
+	}
+	if r3, _ := st.GetRequest(3); r3.BookingID != 0 {
+		t.Errorf("answered request got a booking: %+v", r3)
+	}
+	if rm, _ := st.GetRoom(2); rm.Kind != "" || rm.ParentID != 0 {
+		t.Errorf("room = %+v", rm)
+	}
+	// The new statuses are allowed.
+	if _, err := st.DB.Exec(`UPDATE requests SET status = 'cancelled' WHERE id = 3`); err != nil {
+		t.Error(err)
+	}
+}

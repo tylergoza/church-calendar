@@ -1,7 +1,8 @@
 {{define "content"}}
 <div class="page-head"><div>
-  <h1>Ask for a room</h1>
-  <p class="muted">Pick the day, the times and the rooms. Each room shows whether it's free as you go. A scheduler looks at every request{{if .User}}, unless the rooms don't need approval and are free: then they're booked straight away{{end}}.</p>
+  <h1>{{if .User}}Book a room{{else}}Ask for a room{{end}}</h1>
+  <p class="muted">Pick the day, the times and the rooms. Each room shows whether it's free as you go.
+  {{if .User}}When they're all free, they're booked for you straight away.{{else}}Your request holds the rooms while a scheduler looks at it; they'll call or text you to confirm.{{end}}</p>
 </div></div>
 <div class="card narrow">
   {{template "errors" .Errors}}
@@ -15,16 +16,21 @@
       <input id="website" name="website" tabindex="-1" autocomplete="off">
     </div>
     {{end}}
+    <div class="field">
+      <label for="name">Your name</label>
+      <input id="name" name="name" value="{{.Form.Name}}" required maxlength="200" autocomplete="name">
+    </div>
     <div class="field-row">
       <div class="field">
-        <label for="name">Your name</label>
-        <input id="name" name="name" value="{{.Form.Name}}" required maxlength="200" autocomplete="name">
+        <label for="phone">Phone{{if .User}} <span class="optional">optional</span>{{end}}</label>
+        <input id="phone" name="phone" type="tel" value="{{.Form.Phone}}" {{if not .User}}required{{end}} maxlength="40" autocomplete="tel">
       </div>
       <div class="field">
-        <label for="contact">Email or phone</label>
-        <input id="contact" name="contact" value="{{.Form.Contact}}" required maxlength="200" autocomplete="email">
+        <label for="contact">Email <span class="optional">optional</span></label>
+        <input id="contact" name="contact" type="email" value="{{.Form.Contact}}" maxlength="200" autocomplete="email">
       </div>
     </div>
+    {{if not .User}}<p class="hint">A scheduler will call or text you to confirm. Your phone number is only seen by the church's schedulers.</p>{{end}}
     <div class="field">
       <label for="title">What's it for?</label>
       <input id="title" name="title" value="{{.Form.Title}}" required maxlength="200" placeholder="e.g. Youth group movie night">
@@ -40,14 +46,20 @@
     <fieldset class="fieldset">
       <legend>Rooms</legend>
       {{if .Rooms}}
+      {{with .Loose}}
       <ul class="pick-list">
-        {{range .Rooms}}
-        <li>
-          <label class="check"><input type="checkbox" name="room" value="{{.ID}}" {{if index $.Picked .ID}}checked{{end}}> {{.Name}}{{if .Capacity}} <span class="muted small">up to {{.Capacity}}</span>{{end}}</label>
-          <span class="avail" data-availability-target="room" data-room-id="{{.ID}}" aria-live="polite"></span>
-        </li>
-        {{end}}
+        {{range .}}{{template "room-pick" (dict "R" . "Picked" $.Picked)}}{{end}}
       </ul>
+      {{end}}
+      {{range .Groups}}
+      <div class="room-group">
+        <h3 class="room-group__name">{{.Name}}</h3>
+        <ul class="pick-list">
+          {{with .Whole}}{{template "room-pick" (dict "R" . "Picked" $.Picked "Whole" true)}}{{end}}
+          {{range .Rooms}}{{template "room-pick" (dict "R" . "Picked" $.Picked)}}{{end}}
+        </ul>
+      </div>
+      {{end}}
       {{else}}
       <p class="hint">There are no rooms to ask for yet.</p>
       {{end}}
@@ -62,7 +74,7 @@
       <p class="hint">Only schedulers see this. Setup, equipment, who's in charge on the day.</p>
     </div>
     <div class="form__actions">
-      <button type="submit" class="btn btn--primary">Send request</button>
+      <button type="submit" class="btn btn--primary">{{if .User}}Book{{else}}Send request{{end}}</button>
       <a class="btn btn--ghost" href="/calendar">Cancel</a>
     </div>
   </form>
@@ -70,6 +82,7 @@
 {{with .Mine}}
 <section class="section narrow">
   <h2 class="section__title">Your requests</h2>
+  <p class="muted small"><a href="/my/bookings">See all your bookings</a>, or change or cancel one.</p>
   <ul class="pick-list card">
     {{range .}}
     <li><span><a href="/request/{{.ID}}">{{.Title}}</a><br><span class="muted small">{{.When}} · {{.RoomNames}}</span></span>
@@ -78,4 +91,10 @@
   </ul>
 </section>
 {{end}}
+{{end}}
+{{define "room-pick"}}
+<li>
+  <label class="check"><input type="checkbox" name="room" value="{{.R.ID}}" {{if index .Picked .R.ID}}checked{{end}}> {{if .Whole}}Whole building{{else}}{{.R.Name}}{{end}}{{if .R.Capacity}} <span class="muted small">up to {{.R.Capacity}}</span>{{end}}</label>
+  <span class="avail" data-availability-target="room" data-room-id="{{.R.ID}}" aria-live="polite"></span>
+</li>
 {{end}}

@@ -133,7 +133,8 @@ type Place struct {
 	Address  string   `json:"address"`
 	Notes    string   `json:"notes"`
 	Tags     []string `json:"tags"`
-	AlsoIn   []int64  `json:"also_in"` // areas only: other places a shared area is in
+	AlsoIn   []int64  `json:"also_in"`  // areas only: other places a shared area is in
+	Bookable *bool    `json:"bookable"` // the tracker says people may book it; nil from a tracker too old to say
 }
 
 // Label is the room's name as the tracker shows it: "number – name" when it

@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -42,12 +43,21 @@ func (s *Server) handleRoomShow(w http.ResponseWriter, r *http.Request) {
 	}
 	days := calDays(start, end, 0, s.today(), entries, func(e store.CalendarEntry) bool { return hasRoom(e, rm.Name) })
 	week := func(d time.Time) string { return roomURL(rm.ID) + "?week=" + d.Format(store.DateLayout) }
-	s.render(w, r, http.StatusOK, "rooms/show", map[string]any{
-		"Title": rm.Name, "Room": rm, "Days": days, "Week": weekLabel(start),
+	var inside *store.Room
+	if rm.ParentID != 0 {
+		inside, _ = s.store.GetRoom(rm.ParentID)
+	}
+	data := map[string]any{
+		"Inside": inside,
+		"Title":  rm.Name, "Room": rm, "Days": days, "Week": weekLabel(start),
 		"PrevURL": week(start.AddDate(0, 0, -7)), "NextURL": week(start.AddDate(0, 0, 7)),
 		"IsThisWeek": start.Format(store.DateLayout) == s.thisWeek(),
 		"Weekdays":   []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"},
-	})
+	}
+	if rm.FromTracker() {
+		data["TrackerURL"] = s.tracker().PageURL("place", rm.PlaceID)
+	}
+	s.render(w, r, http.StatusOK, "rooms/show", data)
 }
 
 func (s *Server) roomForm(w http.ResponseWriter, r *http.Request, status int, rm store.Room, errs []string) {
@@ -55,11 +65,45 @@ func (s *Server) roomForm(w http.ResponseWriter, r *http.Request, status int, rm
 	if rm.ID != 0 {
 		title = "Edit " + rm.Name
 	}
-	s.render(w, r, status, "rooms/form", map[string]any{"Title": title, "Form": rm, "Errors": errs})
+	parents, err := s.parentChoices(rm.ID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	data := map[string]any{"Title": title, "Form": rm, "Errors": errs, "Parents": parents}
+	if rm.FromTracker() {
+		data["TrackerURL"] = s.tracker().PageURL("place", rm.PlaceID)
+	}
+	s.render(w, r, status, "rooms/form", data)
+}
+
+// parentChoices are the rooms a hand-made room can be inside: not archived,
+// and not the room itself or anything inside it (that would be a loop).
+func (s *Server) parentChoices(self int64) ([]store.Room, error) {
+	all, err := s.store.ListRooms(false)
+	if err != nil {
+		return nil, err
+	}
+	banned := map[int64]bool{self: self != 0}
+	for grew := true; grew; {
+		grew = false
+		for _, rm := range all {
+			if !banned[rm.ID] && banned[rm.ParentID] {
+				banned[rm.ID], grew = true, true
+			}
+		}
+	}
+	var out []store.Room
+	for _, rm := range all {
+		if !banned[rm.ID] {
+			out = append(out, rm)
+		}
+	}
+	return out, nil
 }
 
 func (s *Server) handleRoomNew(w http.ResponseWriter, r *http.Request) {
-	s.roomForm(w, r, http.StatusOK, store.Room{Bookable: true, NeedsApproval: true}, nil)
+	s.roomForm(w, r, http.StatusOK, store.Room{Bookable: true}, nil)
 }
 
 // readRoom reads the form into rm. The archived box is only on the edit
@@ -67,7 +111,16 @@ func (s *Server) handleRoomNew(w http.ResponseWriter, r *http.Request) {
 func readRoom(r *http.Request, rm *store.Room) []string {
 	var errs []string
 	rm.Name, rm.Notes = formStr(r, "name"), formStr(r, "notes")
-	rm.Bookable, rm.NeedsApproval = formStr(r, "bookable") == "1", formStr(r, "needs_approval") == "1"
+	if !rm.FromTracker() {
+		// An imported room's bookable flag, kind and building are the tracker's.
+		rm.Bookable = formStr(r, "bookable") == "1"
+		rm.ParentID = 0
+		if v := formStr(r, "parent"); v != "" {
+			if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
+				rm.ParentID = id
+			}
+		}
+	}
 	if rm.ID != 0 {
 		rm.Archived = formStr(r, "archived") == "1"
 	}
@@ -85,9 +138,23 @@ func readRoom(r *http.Request, rm *store.Room) []string {
 	return errs
 }
 
+// readRoomChecked is readRoom, then checks that Inside is a room that may
+// hold this one.
+func (s *Server) readRoomChecked(r *http.Request, rm *store.Room) []string {
+	errs := readRoom(r, rm)
+	if rm.ParentID != 0 && !rm.FromTracker() {
+		choices, err := s.parentChoices(rm.ID)
+		if err != nil || !slices.ContainsFunc(choices, func(c store.Room) bool { return c.ID == rm.ParentID }) {
+			rm.ParentID = 0
+			errs = append(errs, "Pick a room that isn't this one or inside it for Inside, or leave it empty.")
+		}
+	}
+	return errs
+}
+
 func (s *Server) handleRoomCreate(w http.ResponseWriter, r *http.Request) {
 	var rm store.Room
-	if errs := readRoom(r, &rm); errs != nil {
+	if errs := s.readRoomChecked(r, &rm); errs != nil {
 		s.roomForm(w, r, http.StatusUnprocessableEntity, rm, errs)
 		return
 	}
@@ -123,7 +190,7 @@ func (s *Server) handleRoomUpdate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	if errs := readRoom(r, rm); errs != nil {
+	if errs := s.readRoomChecked(r, rm); errs != nil {
 		s.roomForm(w, r, http.StatusUnprocessableEntity, *rm, errs)
 		return
 	}

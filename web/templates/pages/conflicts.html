@@ -14,7 +14,7 @@
           {{range $x := (pair .A .B)}}
           <td>
             {{if canSee $x $.User}}<a href="/calendar/{{$x.ID}}"><strong>{{$x.Title}}</strong></a>{{else}}<strong>Busy</strong>{{end}}
-            {{if eq $x.Status "tentative"}}<span class="badge badge--warn">Tentative</span>{{end}}
+            {{if eq $x.Status "tentative"}}<span class="badge badge--warn">Pencilled in</span>{{end}}
             <br><span class="muted small">{{$x.When}} · {{source $x.Source}}</span>
           </td>
           {{end}}

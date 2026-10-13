@@ -76,14 +76,20 @@ Same as the siblings (copy from `../event_planning`, the newest):
 
 | Role | Can |
 |------|-----|
-| `member` | See private bookings in full (not locked ones), ask for rooms |
-| `scheduler` | Also make and edit hand-made bookings, approve or turn down requests, manage rooms, see and resolve conflicts |
+| `member` | See private bookings in full (not locked ones), book free rooms on `/request`, change or cancel their own bookings |
+| `scheduler` | Also make and edit hand-made bookings, approve or turn down visitors' requests, cancel any hand-made or request booking (with a note), manage rooms, see and resolve conflicts |
 | `admin` | Also users (local login), API tokens, connected apps, settings |
 
-Visitors (not signed in) see the public calendar and can send a room
-request if the admin has turned public requests on.
+Visitors (not signed in) see the public calendar and can ask for a room
+with their name and phone number (public requests are on unless an admin
+turns them off). Their request holds the rooms as a `pending` booking
+until a scheduler approves or turns it down.
 
-## Data model (first migration)
+Pending bookings, bookable places from the tracker, rooms inside buildings,
+owners changing their bookings and cancelling are in
+[`BOOKING_PLAN.md`](BOOKING_PLAN.md) (migration `002_pending_bookings.sql`).
+
+## Data model (first migration; 002 changes are noted after it)
 
 ```sql
 -- A room or space that can be booked.
@@ -167,9 +173,27 @@ CREATE TABLE tokens (
 );
 ```
 
+Migration `002_pending_bookings.sql` (see `BOOKING_PLAN.md`):
+
+- `bookings.status` also takes `pending` (a visitor's request waiting for a
+  scheduler). `pending` and `tentative` block rooms like `confirmed`; only
+  `cancelled` frees them. New `cancel_note` and `cancelled_by` for a
+  scheduler cancelling a booking.
+- `requests.status` also takes `cancelled`; new `phone` (required from
+  visitors, never leaves the calendar); `contact` is the email, optional.
+  A visitor's request has its `pending` booking from the start
+  (`booking_id`); approving confirms that same booking. A member's request
+  is `approved` with a `confirmed` booking at once, or refused.
+- `rooms.kind` (the tracker's `building`, `room`, `area`; '' for hand-made)
+  and `rooms.parent_id` (the building it's in). A room and the rooms it's
+  inside or contains count as the same space for busy checks and
+  conflicts. `rooms.bookable` follows the tracker for imported rooms.
+- `rooms.needs_approval` is no longer used (the column stays).
+
 Plus `users`, `sessions`, `settings`, and `series` (hand-made repeats),
 copied from the event planner. Conflicts are **worked out when read**
-(overlapping times in the same `room_id`, not cancelled), not stored, so
+(overlapping times in the same room or a room it's inside or contains,
+not cancelled), not stored, so
 they can't get out of date. A small `conflict_ok` table (pairs of booking
 IDs a scheduler marked "that's fine") hides ones that are known and agreed.
 
@@ -255,8 +279,10 @@ Same limits as today: `from` defaults to today, `to` to 90 days on, at most
 | `/calendar/{id}` | One booking. Links to the owning app for signed-in people |
 | `/calendar/by-source/{source}/{source_id}` | Redirects to that booking, so the apps can send old links here |
 | `/rooms`, `/rooms/{id}` | Rooms and a week view of each. Schedulers: add, edit, archive; **Import from tracker** |
-| `/request` | Ask for a room: pick rooms and times, see which are free as you go |
-| `/requests` | Schedulers: waiting, approved, declined. Approve (makes the booking), decline with a note, **Make this an event** |
+| `/request` | Members book, visitors ask: pick rooms (grouped by building) and times, see which are free as you go |
+| `/request/{id}`, `/request/{id}/edit` | The person's status page (code link, or signed in). Owners edit or cancel; visitors withdraw while it's pending |
+| `/my/bookings` | A signed-in person's own requests and bookings |
+| `/requests` | Schedulers: Waiting (the approval queue), approved, declined, withdrawn, cancelled. Approve (confirms the pending booking), decline with a note, **Make this an event** |
 | `/bookings/new`, `/bookings/{id}/edit` | Hand-made bookings with simple repeats. Bookings from another app are read-only here, with a link to edit them there |
 | `/conflicts` | Clashes from today on, grouped by room, with "That's fine" |
 | `/admin/tokens`, `/admin/apps`, `/admin/users`, `/admin/settings`, `/admin/connections` | As in the event planner. **Connected apps** shows each source, its last push and how many bookings it has, with a reminder that the backfill button is on that app's own **Connections** page (the calendar can't pull, the apps push) |
@@ -330,7 +356,7 @@ Each step is a working app; stop after any of them.
 - [x] Public requests setting on `/admin/settings` (off by default; visitors are sent to sign in); honeypot field (`website`, answered like a success) and 5 sent requests an hour per IP
 - [x] `/request/{id}?code=…` status page for the person who asked (members who sent it and schedulers need no code), with **Withdraw** while it waits
 - [x] `/requests` for schedulers (Waiting / Approved / Declined / Withdrawn, "Rooms busy" marker) and `/requests/{id}`: approve (makes a `request` booking, private or public, with an optional note; the request's details aren't copied), decline with a note. A `request` booking links back to its request. **Make this an event** waits for `replaces` in step 5
-- [x] Rooms with `needs_approval` off book straight away for members, but only when every room picked is free then; otherwise the request waits. Visitors always wait
+- [x] Rooms with `needs_approval` off book straight away for members, but only when every room picked is free then; otherwise the request waits. Visitors always wait (replaced by `BOOKING_PLAN.md`: members book when free or are refused; `needs_approval` is retired)
 - [x] Tests: approve makes exactly one booking; double-approve is refused (409), plus busy-room rules, honeypot, rate limit, withdraw and visibility of the status page
 
 ### 5. Push API for apps

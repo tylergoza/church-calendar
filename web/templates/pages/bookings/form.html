@@ -75,6 +75,11 @@
     </div>
   </form>
 </div>
+{{if and .Form.ID (not .Form.Cancelled)}}
+<div class="card narrow danger-zone">
+  {{template "cancel-booking" (dict "B" .Form "CSRF" .CSRF)}}
+</div>
+{{end}}
 {{if .Form.ID}}
 <div class="card narrow danger-zone">
   {{if .Form.SeriesID}}

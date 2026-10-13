@@ -12,7 +12,7 @@
         <tr>
           <td data-label="Room"><a href="/rooms/{{.ID}}"><strong>{{.Name}}</strong></a>{{if .Archived}} <span class="badge badge--locked">Archived</span>{{end}}{{with .TrackerPath}}<br><span class="muted small">{{.}}</span>{{end}}</td>
           <td data-label="Capacity" class="num">{{if .Capacity}}{{.Capacity}}{{end}}</td>
-          <td data-label="Requests">{{if not .Bookable}}<span class="muted">Not offered</span>{{else if .NeedsApproval}}Need approval{{else}}Book straight away{{end}}</td>
+          <td data-label="Requests">{{if .Bookable}}Bookable{{else}}<span class="muted">Not offered</span>{{end}}</td>
           {{if $.User.CanSchedule}}<td class="actions"><a class="btn btn--ghost btn--sm" href="/rooms/{{.ID}}/edit">Edit</a></td>{{end}}
         </tr>
       {{end}}

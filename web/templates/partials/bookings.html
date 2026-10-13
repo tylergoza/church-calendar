@@ -2,12 +2,12 @@
      Busy items carry only rooms and times (the store blanks the rest). */}}
 {{define "cal-item"}}
   {{if .I.Busy}}
-    <p class="cal-item cal-item--busy">{{.I.BusyText}}</p>
+    <p class="cal-item cal-item--busy{{if .I.NotYet}} cal-item--{{.I.Status}}{{end}}">{{.I.BusyText}}</p>
   {{else}}
-    <div class="cal-item">
+    <div class="cal-item{{if .I.NotYet}} cal-item--{{.I.Status}}{{end}}">
       <span class="cal-item__when">{{.I.When}}</span>
       <a class="cal-item__title" href="/calendar/{{.I.ID}}">{{.I.Title}}</a>
-      {{if eq .I.Status "tentative"}}<span class="badge badge--warn">Tentative</span>{{end}}
+      {{if eq .I.Status "pending"}}<span class="badge badge--warn">Pending</span>{{else if eq .I.Status "tentative"}}<span class="badge badge--warn">Pencilled in</span>{{end}}
       {{if .I.Kind}}<span class="cal-item__kind muted">{{.I.Kind}}</span>{{end}}
       {{with .I.RoomNames}}<span class="cal-item__rooms muted">{{.}}</span>{{end}}
       {{if and .User .I.URL}}<a class="cal-item__inside small" href="{{.I.URL}}">Open in the {{source .I.Source}}</a>{{end}}

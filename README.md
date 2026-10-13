@@ -26,7 +26,7 @@ are kept as a thin copy or an ID plus a cached name.
 | Connected app | What it adds | What this calendar keeps |
 |---------------|--------------|--------------------------|
 | Nothing (alone) | Rooms and bookings made by hand, [room requests](#room-requests), the public calendar, `.ics` feeds, the [read API](#reading-the-calendar-from-elsewhere), local login | Its own users, rooms and bookings |
-| Maintenance tracker | **Import from tracker** for rooms. A hand-made room with the same name is taken over | The tracker's place ID and a cached name or path |
+| Maintenance tracker | **Import from tracker** for rooms, and a sync every 15 minutes: rooms marked bookable in the tracker appear on the request form by themselves, inside their building. A hand-made room with the same name is taken over | The tracker's place ID, a cached name or path, its kind, the building it's in and whether it's bookable |
 | Event planner | Its events arrive by push, and **Make this an event** appears on hand-made bookings and approved requests. Its `/calendar` redirects here | A thin copy of each event: times, rooms, title, public description, visibility, link back. Never notes, tasks, helpers or needs |
 | Production planner | Its rehearsals and performances arrive by push | The same thin copy. Never cast, mics or readiness |
 | [User Management](#single-sign-on) | Sign in with a church account, and roles. Local login is the break-glass | A local user row linked to the User Management ID, so bookings stay |
@@ -65,8 +65,8 @@ Each role includes the ones before it.
 
 | Can | Member | Scheduler | Admin |
 |-----|:------:|:---------:|:-----:|
-| See private bookings in full (not locked ones), ask for rooms | ✓ | ✓ | ✓ |
-| Make and edit hand-made bookings, answer room requests, manage rooms, see and resolve conflicts | | ✓ | ✓ |
+| See private bookings in full (not locked ones), book free rooms, change or cancel their own bookings | ✓ | ✓ | ✓ |
+| Make and edit hand-made bookings, answer visitors' requests, cancel any hand-made or request booking, manage rooms, see and resolve conflicts | | ✓ | ✓ |
 | Users, API tokens, connections, settings and backups | | | ✓ |
 
 Visitors (not signed in) see the public calendar.
@@ -77,14 +77,29 @@ Users page has a role select, and `create-user` takes `--role`.
 
 ## Room requests
 
-Anyone signed in can **Ask for a room** at `/request`; each room shows
-whether it's free as they pick times. Visitors can too once an admin ticks
-**Let visitors ask for rooms** on **Settings** (off by default; a hidden
-honeypot field and a limit of 5 requests an hour per address keep spam
-down). Schedulers answer on **Requests**: approving books the rooms (source
-"request"), turning down takes a note. A member's request for rooms that
-don't need approval, when they're free, is booked straight away. There's
-no email yet: people get a `/request/{id}?code=…` link to check back on.
+`/request` shows the bookable rooms, grouped by building, and whether each
+is free as people pick times. Booking a building makes every room in it
+busy, and booking a room makes its building busy.
+
+- **Signed-in members book.** When every room is free it's booked
+  (confirmed) straight away. If anything is in the way (including pending
+  and pencilled-in bookings) nothing is saved and the form shows the busy
+  times. They can change or cancel their bookings later from **My
+  bookings**.
+- **Visitors ask**, with their name and a phone number (email optional).
+  Their request holds the rooms straight away as a **pending** booking,
+  shown hatched on the calendar, until a scheduler approves or turns it
+  down on **Requests**; a scheduler calls or texts them to confirm. The
+  phone number is only shown to schedulers, never in the API or feeds.
+  Visitor requests are on unless an admin unticks **Let visitors ask for
+  rooms** on **Settings**; a hidden honeypot field and a limit of 5
+  requests an hour per address keep spam down.
+- **Schedulers and admins** can cancel any hand-made or request booking
+  with a note to the person. Bookings sent by the planners are cancelled
+  in those apps.
+
+There's no email yet: people get a `/request/{id}?code=…` link to check
+back on.
 
 ## Reading the calendar from elsewhere
 
@@ -149,7 +164,7 @@ behaves as if that app doesn't exist.
 | Connection | Environment override | What it turns on |
 |------------|----------------------|------------------|
 | Single sign-on | `SSO_URL`, `SSO_INTERNAL_URL`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `BASE_URL` | Signing in through User Management (see [Single sign-on](#single-sign-on)); off = local login |
-| Maintenance tracker | `TRACKER_URL`, `TRACKER_TOKEN` | Importing rooms from the tracker's places |
+| Maintenance tracker | `TRACKER_URL`, `TRACKER_TOKEN` | Importing rooms from the tracker's places, and the 15-minute sync of bookable places |
 | Event planner | `EVENTS_URL` (address only) | **Make this an event** on bookings and requests |
 
 **Importing rooms.** With the tracker connected, schedulers get **Import
@@ -161,6 +176,17 @@ archives rooms whose place was deleted in the tracker. Bookings an app sent
 by name before the room existed (by its label or bare name) are linked to
 it, so they're checked for conflicts; adding or renaming a room by hand
 does the same for its name.
+
+**Bookable places.** Whether a place can be asked for on `/request` is set
+in the tracker (**Can be booked** on the place). Every 15 minutes, and
+after **Test** on Connections, the calendar syncs with the tracker: it
+does what a re-import does, copies each imported room's bookable flag,
+kind and building, and adds places marked bookable that aren't rooms yet.
+Places that aren't bookable are only added with **Import from tracker**.
+A failed sync just tries again next time; it never archives. For an
+imported room the **Bookable** box is read-only ("Set in the tracker");
+hand-made rooms keep the box and an **Inside** choice for their building.
+The event and production planners can still book every room.
 
 The rules:
 

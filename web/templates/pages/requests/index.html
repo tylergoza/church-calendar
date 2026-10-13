@@ -1,6 +1,7 @@
 {{define "content"}}
 <div class="page-head">
-  <div><h1>Room requests</h1><p class="muted">Approving a request books its rooms. People see the answer, and any note, on the link they were given.</p></div>
+  <div><h1>{{if eq .Status "waiting"}}Waiting for approval{{else}}Room requests{{end}}</h1>
+    <p class="muted">{{if eq .Status "waiting"}}Visitors' requests waiting for approval; their rooms are held as pending. {{end}}Approving a request confirms its booking. People see the answer, and any note, on the link they were given.</p></div>
 </div>
 <nav class="tabs" aria-label="Requests by status">
   {{range .Statuses}}<a href="/requests?status={{.}}" {{if eq . $.Status}}aria-current="page"{{end}}>{{requestStatusLabel .}}</a>{{end}}

@@ -10,25 +10,26 @@ var ErrRoomNameTaken = errors.New("another room already has that name")
 
 // Room is a room or space that can be booked.
 type Room struct {
-	ID            int64
-	Name          string
-	PlaceID       int64  // the tracker's place ID; 0 when typed in by hand
-	TrackerPath   string // "Main building › Lifecenter", cached from the tracker
-	Capacity      int    // 0 when not known
-	Bookable      bool   // offered on the request form
-	NeedsApproval bool   // requests for it wait for a scheduler
-	Notes         string
-	Archived      bool
+	ID          int64
+	Name        string
+	PlaceID     int64  // the tracker's place ID; 0 when typed in by hand
+	TrackerPath string // "Main building › Lifecenter", cached from the tracker
+	Capacity    int    // 0 when not known
+	Bookable    bool   // offered on the request form
+	Kind        string // the tracker's kind: building, room or area; "" for hand-made
+	ParentID    int64  // the room it's inside (a building), 0 if none
+	Notes       string
+	Archived    bool
 }
 
 // FromTracker reports whether the room was imported from the tracker.
 func (r Room) FromTracker() bool { return r.PlaceID != 0 }
 
-const roomCols = `id, name, COALESCE(tracker_place_id, 0), tracker_path, COALESCE(capacity, 0), bookable, needs_approval, notes, archived`
+const roomCols = `id, name, COALESCE(tracker_place_id, 0), tracker_path, COALESCE(capacity, 0), bookable, kind, COALESCE(parent_id, 0), notes, archived`
 
 func scanRoom(sc interface{ Scan(...any) error }) (Room, error) {
 	var r Room
-	err := sc.Scan(&r.ID, &r.Name, &r.PlaceID, &r.TrackerPath, &r.Capacity, &r.Bookable, &r.NeedsApproval, &r.Notes, &r.Archived)
+	err := sc.Scan(&r.ID, &r.Name, &r.PlaceID, &r.TrackerPath, &r.Capacity, &r.Bookable, &r.Kind, &r.ParentID, &r.Notes, &r.Archived)
 	return r, err
 }
 
@@ -78,8 +79,8 @@ func (s *Store) CreateRoom(r *Room) (int64, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
-	res, err := tx.Exec(`INSERT INTO rooms (name, capacity, bookable, needs_approval, notes) VALUES (?, ?, ?, ?, ?)`,
-		strings.TrimSpace(r.Name), nullInt(int64(r.Capacity)), r.Bookable, r.NeedsApproval, r.Notes)
+	res, err := tx.Exec(`INSERT INTO rooms (name, capacity, bookable, parent_id, notes) VALUES (?, ?, ?, ?, ?)`,
+		strings.TrimSpace(r.Name), nullInt(int64(r.Capacity)), r.Bookable, nullInt(r.ParentID), r.Notes)
 	if err != nil {
 		return 0, roomNameErr(err)
 	}
@@ -103,8 +104,8 @@ func (s *Store) UpdateRoom(r *Room) error {
 	}
 	defer tx.Rollback()
 	name := strings.TrimSpace(r.Name)
-	res, err := tx.Exec(`UPDATE rooms SET name = ?, capacity = ?, bookable = ?, needs_approval = ?, notes = ?, archived = ? WHERE id = ?`,
-		name, nullInt(int64(r.Capacity)), r.Bookable, r.NeedsApproval, r.Notes, r.Archived, r.ID)
+	res, err := tx.Exec(`UPDATE rooms SET name = ?, capacity = ?, bookable = ?, parent_id = ?, notes = ?, archived = ? WHERE id = ?`,
+		name, nullInt(int64(r.Capacity)), r.Bookable, nullInt(r.ParentID), r.Notes, r.Archived, r.ID)
 	if err != nil {
 		return roomNameErr(err)
 	}

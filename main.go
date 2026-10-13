@@ -121,6 +121,21 @@ func main() {
 		}
 	}()
 
+	// Follow the maintenance tracker's places, when it's connected: once
+	// now, then every 15 minutes.
+	go func() {
+		t := time.NewTicker(15 * time.Minute)
+		defer t.Stop()
+		for {
+			srv.SyncTracker(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
+	}()
+
 	go func() {
 		logger.Info("listening", "addr", *addr, "db", *dbPath, "dev", *dev, "tz", time.Local.String())
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

@@ -7,13 +7,16 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/tylergoza/church-calendar/internal/store"
 )
 
-// Room requests: anyone signed in (and visitors, when an admin turns
-// public requests on) can ask for rooms at /request. Schedulers answer at
-// /requests; approving makes a booking with source "request". People
+// Room requests at /request. Signed-in members book: when every room is
+// free it's booked (confirmed) straight away, otherwise it's refused with
+// what's in the way. Visitors (when public requests are on, the default)
+// ask: their request makes a pending booking at once, which blocks the
+// rooms until a scheduler approves or turns it down at /requests. People
 // check back at /request/{id}?code=… (no email yet, see PLAN.md).
 
 const publicRequestsSetting = "public_requests"
@@ -46,6 +49,60 @@ func (s *Server) bookableRooms() ([]store.Room, error) {
 	return out, nil
 }
 
+// roomGroup is a building on the request form with the bookable rooms in
+// it. Whole is the building itself when it can be picked whole.
+type roomGroup struct {
+	Name  string
+	Whole *store.Room
+	Rooms []store.Room
+}
+
+// groupRooms sorts the bookable rooms under the top-level room they are in
+// (a building, or deeper: a room in a floor-less area still lands under
+// its building). Rooms in no building, and buildings with nothing inside,
+// are loose. all is every room offered, in name order.
+func groupRooms(all, bookable []store.Room) (loose []store.Room, groups []roomGroup) {
+	byID := map[int64]store.Room{}
+	for _, rm := range all {
+		byID[rm.ID] = rm
+	}
+	top := func(rm store.Room) store.Room {
+		for seen := 0; rm.ParentID != 0 && seen < len(all); seen++ {
+			up, ok := byID[rm.ParentID]
+			if !ok {
+				break
+			}
+			rm = up
+		}
+		return rm
+	}
+	idx := map[int64]int{}
+	for _, rm := range bookable {
+		root := top(rm)
+		if root.ID == rm.ID {
+			continue
+		}
+		i, ok := idx[root.ID]
+		if !ok {
+			i = len(groups)
+			idx[root.ID] = i
+			g := roomGroup{Name: root.Name}
+			if root.Bookable {
+				whole := root
+				g.Whole = &whole
+			}
+			groups = append(groups, g)
+		}
+		groups[i].Rooms = append(groups[i].Rooms, rm)
+	}
+	for _, rm := range bookable {
+		if _, isGroup := idx[rm.ID]; !isGroup && top(rm).ID == rm.ID {
+			loose = append(loose, rm)
+		}
+	}
+	return loose, groups
+}
+
 func (s *Server) requestForm(w http.ResponseWriter, r *http.Request, status int, req store.Request, picked []int64, errs []string) {
 	rooms, err := s.bookableRooms()
 	if err != nil {
@@ -56,9 +113,15 @@ func (s *Server) requestForm(w http.ResponseWriter, r *http.Request, status int,
 	for _, id := range picked {
 		isPicked[id] = true
 	}
+	everyRoom, err := s.store.ListRooms(false)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	loose, groups := groupRooms(everyRoom, rooms)
 	u := currentUser(r)
 	data := map[string]any{
-		"Title": "Ask for a room", "Form": req, "Rooms": rooms, "Picked": isPicked, "Errors": errs,
+		"Title": "Ask for a room", "Form": req, "Rooms": rooms, "Loose": loose, "Groups": groups, "Picked": isPicked, "Errors": errs,
 		"PublicHeader": u == nil, "Today": s.today(),
 	}
 	if u != nil {
@@ -98,10 +161,40 @@ func (s *Server) handleRequestNew(w http.ResponseWriter, r *http.Request) {
 	s.requestForm(w, r, http.StatusOK, req, picked, nil)
 }
 
+// phoneDigits is the digits of a phone number once spaces, dashes, dots,
+// brackets and a leading + are taken out; "" if anything else is in it or
+// it isn't 7–15 digits long.
+func phoneDigits(phone string) string {
+	phone = strings.TrimPrefix(strings.TrimSpace(phone), "+")
+	var b strings.Builder
+	for _, c := range phone {
+		switch {
+		case c >= '0' && c <= '9':
+			b.WriteRune(c)
+		case c == ' ' || c == '-' || c == '.' || c == '(' || c == ')':
+		default:
+			return ""
+		}
+	}
+	if n := b.Len(); n < 7 || n > 15 {
+		return ""
+	}
+	return b.String()
+}
+
+// looksLikeEmail is a loose check: something@something.something, no spaces.
+func looksLikeEmail(v string) bool {
+	at := strings.LastIndex(v, "@")
+	return at > 0 && strings.Contains(v[at:], ".") && !strings.ContainsAny(v, " \t<>,") && !strings.HasSuffix(v, ".")
+}
+
 // readRequest reads the form into req and returns the rooms picked, which
-// must be among the bookable ones.
+// must be among the bookable ones. Visitors must give a phone number;
+// signed-in people's accounts say who they are.
 func (s *Server) readRequest(r *http.Request, req *store.Request) ([]int64, []string, error) {
+	visitor := currentUser(r) == nil
 	req.Name, req.Contact, req.Title = formStr(r, "name"), formStr(r, "contact"), formStr(r, "title")
+	req.Phone = formStr(r, "phone")
 	req.StartsOn, req.StartTime = formStr(r, "starts_on"), formStr(r, "start_time")
 	req.EndsOn, req.EndTime = formStr(r, "ends_on"), formStr(r, "end_time")
 	req.Details = formStr(r, "details")
@@ -112,8 +205,14 @@ func (s *Server) readRequest(r *http.Request, req *store.Request) ([]int64, []st
 	if req.Name == "" || len(req.Name) > 200 {
 		errs = append(errs, "Tell us your name.")
 	}
-	if req.Contact == "" || len(req.Contact) > 200 {
-		errs = append(errs, "Give an email address or phone number so we can reach you.")
+	switch {
+	case req.Phone == "" && visitor:
+		errs = append(errs, "Give a phone number so a scheduler can call or text you.")
+	case req.Phone != "" && (len(req.Phone) > 40 || phoneDigits(req.Phone) == ""):
+		errs = append(errs, "That phone number doesn't look right: 7 to 15 digits, like 555-123-4567.")
+	}
+	if req.Contact != "" && (len(req.Contact) > 200 || !looksLikeEmail(req.Contact)) {
+		errs = append(errs, "That email address doesn't look right. It's optional: leave it empty if you like.")
 	}
 	if req.Title == "" || len(req.Title) > 200 {
 		errs = append(errs, "Say what the room is for.")
@@ -154,23 +253,6 @@ func (s *Server) readRequest(r *http.Request, req *store.Request) ([]int64, []st
 	return rooms, errs, nil
 }
 
-// bookNow reports whether a member's request can be booked straight away:
-// none of its rooms need approval and they're all free then.
-func (s *Server) bookNow(req *store.Request, rooms []int64) (bool, error) {
-	all, err := s.bookableRooms()
-	if err != nil {
-		return false, err
-	}
-	for _, id := range rooms {
-		i := slices.IndexFunc(all, func(rm store.Room) bool { return rm.ID == id })
-		if i < 0 || all[i].NeedsApproval {
-			return false, nil
-		}
-	}
-	busy, err := s.store.BusyInRooms(rooms, req.StartsOn, req.StartTime, req.EndsOn, req.EndTime)
-	return len(busy) == 0, err
-}
-
 func (s *Server) handleRequestCreate(w http.ResponseWriter, r *http.Request) {
 	if !s.canRequest(r) {
 		s.sendToLogin(w, r)
@@ -202,30 +284,65 @@ func (s *Server) handleRequestCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u != nil {
+		// Members book: free is booked, busy is refused and nothing saved.
 		req.UserID = u.ID
-	} else {
-		s.requestLimiter.fail(ip) // counts sent requests, not failures
+		busy, err := s.store.BookRequest(&req, rooms)
+		if errors.Is(err, store.ErrRoomsBusy) {
+			s.requestForm(w, r, http.StatusConflict, req, rooms, busyErrors(busy, req.EndsOn != ""))
+			return
+		} else if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		s.redirect(w, r, requestURL(req.ID, req.Code), "Booked. The rooms were free, so they're yours.")
+		return
 	}
+	s.requestLimiter.fail(ip) // counts sent requests, not failures
 	if err := s.store.CreateRequest(&req, rooms); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	msg := "Your request was sent. Keep the link to this page to check on it."
-	if u != nil {
-		now, err := s.bookNow(&req, rooms)
-		if err != nil {
-			s.serverError(w, r, err)
-			return
-		}
-		if now {
-			if _, err := s.store.ApproveRequest(req.ID, 0, "Booked straight away: these rooms don't need approval.", "private"); err != nil {
-				s.serverError(w, r, err)
-				return
+	s.redirect(w, r, requestURL(req.ID, req.Code), "Your request was sent. Keep the link to this page to check on it.")
+}
+
+// busyErrors says what's in the way of a booking, one line per room: busy
+// times only, never titles (as the live availability shows). overDays is
+// set when the booking runs over several days, so times need their dates.
+func busyErrors(busy map[int64][]store.Booking, overDays bool) []string {
+	var out []string
+	seen := map[string]bool{}
+	for id, list := range busy {
+		name := ""
+		var times []string
+		for _, b := range list {
+			for _, rm := range b.Rooms {
+				if rm.RoomID == id {
+					name = rm.Name
+				}
 			}
-			msg = "Booked. These rooms don't need approval, and they were free."
+			times = append(times, busyWhen(b, overDays))
 		}
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name+" is taken then: "+strings.Join(times, "; ")+".")
 	}
-	s.redirect(w, r, requestURL(req.ID, req.Code), msg)
+	slices.Sort(out)
+	return out
+}
+
+// busyWhen is when a busy booking is, for someone booking on one day (just
+// the times) or over several (with dates).
+func busyWhen(b store.Booking, overDays bool) string {
+	when := b.When()
+	if !overDays && b.LastDate() == b.StartsOn {
+		when = b.ShortWhen()
+	}
+	if b.NotYet() {
+		when += " (pending)"
+	}
+	return when
 }
 
 // availability is the JSON the request form's availability controller
@@ -281,11 +398,7 @@ func (s *Server) handleRequestAvailability(w http.ResponseWriter, r *http.Reques
 	for _, id := range ids {
 		st := roomStatus{Free: len(busy[id]) == 0}
 		for _, b := range busy[id] {
-			when := b.When()
-			if endsOn == "" && b.LastDate() == b.StartsOn {
-				when = b.ShortWhen()
-			}
-			st.Busy = append(st.Busy, when)
+			st.Busy = append(st.Busy, busyWhen(b, endsOn != ""))
 		}
 		out.Rooms[strconv.FormatInt(id, 10)] = st
 	}
@@ -320,10 +433,25 @@ func (s *Server) handleRequestStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "private, no-store")
-	s.render(w, r, http.StatusOK, "requests/status", map[string]any{
+	data := map[string]any{
 		"Title": req.Title, "Request": req, "Code": req.Code, "PublicHeader": currentUser(r) == nil,
 		"Link": s.baseURL(r) + requestURL(req.ID, req.Code),
-	})
+	}
+	// The member who asked may change or cancel it, unless a planner took
+	// the booking over: then it's part of an event, and that's linked.
+	if u := currentUser(r); u != nil && req.UserID != 0 && u.ID == req.UserID {
+		b, taken, err := s.takenOver(req)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		data["Owner"] = true
+		data["CanChange"] = s.canChange(req, taken)
+		if taken {
+			data["EventBooking"] = b
+		}
+	}
+	s.render(w, r, http.StatusOK, "requests/status", data)
 }
 
 func (s *Server) handleRequestWithdraw(w http.ResponseWriter, r *http.Request) {

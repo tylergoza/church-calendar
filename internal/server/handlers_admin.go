@@ -25,7 +25,7 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	public := ""
+	public := "0"
 	if r.PostFormValue("public_requests") == "1" {
 		public = "1"
 	}

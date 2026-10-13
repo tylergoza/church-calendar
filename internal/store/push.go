@@ -165,11 +165,13 @@ func (s *Store) BusyInRoomsNamed(names []string, from, to string) ([]Booking, er
 	for _, n := range names {
 		args = append(args, n)
 	}
-	return queryBookings(s.DB, `SELECT `+bookingCols+` FROM bookings
+	// A room's building and the rooms inside it count too.
+	return queryBookings(s.DB, `WITH RECURSIVE `+familySQL+`
+		SELECT `+bookingCols+` FROM bookings
 		WHERE status <> 'cancelled' AND starts_on <= ? AND (CASE ends_on WHEN '' THEN starts_on ELSE ends_on END) >= ?
 		AND id IN (SELECT booking_id FROM booking_rooms
 			WHERE room_name COLLATE NOCASE IN (`+marks+`)
-			   OR room_id IN (SELECT id FROM rooms WHERE name IN (`+marks+`)))
+			   OR room_id IN (SELECT f.related_id FROM room_family f JOIN rooms r ON r.id = f.room_id WHERE r.name IN (`+marks+`)))
 		ORDER BY starts_on, start_time <> '', start_time, id`, args...)
 }
 

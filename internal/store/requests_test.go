@@ -82,8 +82,58 @@ func TestDeclineAndWithdraw(t *testing.T) {
 	if list, _ := st.ListRequests("declined"); len(list) != 1 || list[0].Answer != "Taken that night" || list[0].RoomNames() != "Hall" {
 		t.Errorf("declined = %+v", list)
 	}
-	if n := countBookings(t, st, SourceRequest); n != 0 {
-		t.Errorf("%d bookings", n)
+	// Both pending bookings were cancelled: kept, but the hall is free.
+	if busy, _ := st.BusyInRooms([]int64{hall}, "2026-11-07", "18:00", "", "21:00"); len(busy) != 0 {
+		t.Errorf("hall still busy: %+v", busy)
+	}
+	for _, r := range []*Request{a, b} {
+		if bk, err := st.GetBooking(r.BookingID); err != nil || bk.Status != "cancelled" {
+			t.Errorf("booking %d = %+v, %v", r.BookingID, bk, err)
+		}
+	}
+}
+
+func TestPendingRequestBlocks(t *testing.T) {
+	st := openTest(t)
+	hall := addRoom(t, st, "Hall")
+	r := addRequest(t, st, hall)
+	b, err := st.GetBooking(r.BookingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Status != "pending" || b.Source != SourceRequest || b.Visibility != "private" || b.CreatedBy != 0 || b.RoomNames() != "Hall" {
+		t.Errorf("pending booking = %+v", b)
+	}
+	if busy, _ := st.BusyInRooms([]int64{hall}, "2026-11-07", "20:00", "", "22:00"); len(busy[hall]) != 1 {
+		t.Errorf("pending booking doesn't block: %+v", busy)
+	}
+	// A member can't book over it, and nothing is saved.
+	m := &Request{Name: "Mel", UserID: 0, Title: "Prayer", StartsOn: "2026-11-07", StartTime: "20:00", EndTime: "22:00"}
+	busy, err := st.BookRequest(m, []int64{hall})
+	if !errors.Is(err, ErrRoomsBusy) || len(busy[hall]) != 1 || m.ID != 0 {
+		t.Fatalf("BookRequest over pending: %v, %+v, %+v", err, busy, m)
+	}
+	if n := countBookings(t, st, SourceRequest); n != 1 {
+		t.Errorf("%d request bookings, want 1", n)
+	}
+	// Approving flips the same booking.
+	id, err := st.ApproveRequest(r.ID, 0, "", "public")
+	if err != nil || id != r.BookingID {
+		t.Fatalf("approve = %d, %v; want booking %d", id, err, r.BookingID)
+	}
+	if b, _ := st.GetBooking(id); b.Status != "confirmed" || b.Visibility != "public" {
+		t.Errorf("approved booking = %+v", b)
+	}
+	// Free times book straight away, confirmed, made by the member.
+	m = &Request{Name: "Mel", Title: "Prayer", StartsOn: "2026-11-08", StartTime: "20:00"}
+	if _, err := st.BookRequest(m, []int64{hall}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.GetRequest(m.ID); got.Status != "approved" || got.BookingID == 0 || got.DecidedBy != 0 {
+		t.Errorf("member request = %+v", got)
+	}
+	if b, _ := st.GetBooking(m.BookingID); b.Status != "confirmed" || b.Visibility != "private" {
+		t.Errorf("member booking = %+v", b)
 	}
 }
 

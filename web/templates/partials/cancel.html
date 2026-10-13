@@ -1,0 +1,26 @@
+{{/* Cancel a hand-made or request booking, keeping it on record. Pass a dict with B (the booking) and CSRF. */}}
+{{define "cancel-booking"}}
+<h2 class="section__title">Cancel this booking</h2>
+<p class="muted small">Frees its rooms but keeps the booking on record. If it came from a room request, the person sees your note on their request page.</p>
+<form method="post" action="/bookings/{{.B.ID}}/cancel" class="form cancel-form"
+      data-controller="confirm" data-confirm-message-value="Cancel {{.B.Title}}?" data-action="submit->confirm#check">
+  {{template "csrf" .CSRF}}
+  {{if .B.SeriesID}}
+  <div class="segmented">
+    <label><input type="radio" name="apply" value="this" checked> Just {{fmtDate .B.OccurrenceDate}}</label>
+    <label><input type="radio" name="apply" value="later"> This and later dates</label>
+  </div>
+  {{end}}
+  <div class="field">
+    <label for="cancel-note">Note to the person <span class="optional">optional</span></label>
+    <textarea id="cancel-note" name="note" rows="2" maxlength="4000"></textarea>
+  </div>
+  <button type="submit" class="btn btn--danger-ghost btn--sm">Cancel booking</button>
+</form>
+{{end}}
+
+{{/* Shown instead of the cancel button for a booking another app owns. Pass the booking and its source label as a dict with B and Source. */}}
+{{define "cancel-elsewhere"}}
+<h2 class="section__title">Cancel this booking</h2>
+<p class="muted small">Cancel it in the {{.Source}}{{if .B.URL}}: <a href="{{.B.URL}}">open it there</a>{{end}}. The calendar never changes another app's bookings.</p>
+{{end}}

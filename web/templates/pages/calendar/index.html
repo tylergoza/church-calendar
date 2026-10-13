@@ -12,7 +12,7 @@
 </div>
 <h1 class="print-only">{{.Heading}}</h1>
 
-{{if or .Rooms .Sources}}
+{{if or .Rooms .Sources .HasPending (not .ShowPending)}}
 <form class="cal-filter no-print" method="get" action="/calendar" data-controller="autosubmit">
   <input type="hidden" name="month" value="{{.Month}}">
   {{if .Rooms}}
@@ -28,6 +28,10 @@
     <option value="">Everything</option>
     {{range .Sources}}<option value="{{.Value}}" {{if eq .Value $.Source}}selected{{end}}>{{.Label}}</option>{{end}}
   </select>
+  {{end}}
+  {{if or .HasPending (not .ShowPending)}}
+  <input type="hidden" name="pending" value="0">
+  <label class="cal-filter__check"><input type="checkbox" name="pending" value="1" {{if .ShowPending}}checked{{end}} data-action="autosubmit#submit"> Show pending</label>
   {{end}}
   <button type="submit" class="btn btn--sm">Show</button>
   {{if .Filtered}}<a class="btn btn--sm btn--ghost" href="/calendar?month={{.Month}}">Clear</a>{{end}}

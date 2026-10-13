@@ -107,6 +107,8 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 	if source != "" && sourceGroup(source) != source {
 		source = ""
 	}
+	pv := q["pending"] // the form sends 0 then 1 when ticked
+	showPending := len(pv) == 0 || pv[len(pv)-1] != "0"
 	first := month
 	last := first.AddDate(0, 1, -1)
 	gridStart := first.AddDate(0, 0, -int(first.Weekday()))
@@ -144,6 +146,9 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 		if room != "" && !hasRoom(e, room) {
 			return false
 		}
+		if !showPending && e.NotYet() {
+			return false
+		}
 		return source == "" || (!e.Busy && sourceGroup(e.Source) == source)
 	})
 	var grid [][]*calDay
@@ -166,10 +171,22 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 		if source != "" {
 			v.Set("source", source)
 		}
+		if !showPending {
+			v.Set("pending", "0")
+		}
 		return "/calendar?" + v.Encode()
+	}
+	hasPending := false
+	for _, e := range entries {
+		if e.NotYet() {
+			hasPending = true
+			break
+		}
 	}
 	base := s.baseURL(r)
 	s.render(w, r, http.StatusOK, "calendar/index", map[string]any{
+		"ShowPending":  showPending,
+		"HasPending":   hasPending,
 		"Title":        first.Format("January 2006"),
 		"PublicHeader": currentUser(r) == nil,
 		"CanRequest":   s.canRequest(r),
@@ -181,7 +198,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 		"Room":         room,
 		"Sources":      sources,
 		"Source":       source,
-		"Filtered":     room != "" || source != "",
+		"Filtered":     room != "" || source != "" || !showPending,
 		"PrevURL":      link(first.AddDate(0, -1, 0)),
 		"NextURL":      link(first.AddDate(0, 1, 0)),
 		"IsToday":      today[:7] == first.Format("2006-01"),
@@ -264,6 +281,12 @@ func newCalItem(e store.CalendarEntry, ds string) calItem {
 			it.BusyText = who + " · all day"
 		} else {
 			it.BusyText = who + " · " + it.When
+		}
+		switch e.Status {
+		case "pending":
+			it.BusyText += " · pending"
+		case "tentative":
+			it.BusyText += " · pencilled in"
 		}
 	}
 	return it
