@@ -4,12 +4,10 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/tylergoza/church-calendar/internal/store"
 )
-
-// roomWeeks is how far ahead a room's page lists its bookings.
-const roomWeeks = 8
 
 func roomURL(id int64) string { return "/rooms/" + strconv.FormatInt(id, 10) }
 
@@ -34,15 +32,20 @@ func (s *Server) handleRoomShow(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	from := s.today()
-	to := s.todayTime().AddDate(0, 0, roomWeeks*7-1).Format(store.DateLayout)
-	bookings, err := s.store.BookingsBetween(from, to, rm.ID)
+	start := s.weekOf(r)
+	end := start.AddDate(0, 0, 6)
+	entries, err := s.store.Calendar(start.Format(store.DateLayout), end.Format(store.DateLayout), s.access(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
+	days := calDays(start, end, 0, s.today(), entries, func(e store.CalendarEntry) bool { return hasRoom(e, rm.Name) })
+	week := func(d time.Time) string { return roomURL(rm.ID) + "?week=" + d.Format(store.DateLayout) }
 	s.render(w, r, http.StatusOK, "rooms/show", map[string]any{
-		"Title": rm.Name, "Room": rm, "Bookings": bookings, "Weeks": roomWeeks,
+		"Title": rm.Name, "Room": rm, "Days": days, "Week": weekLabel(start),
+		"PrevURL": week(start.AddDate(0, 0, -7)), "NextURL": week(start.AddDate(0, 0, 7)),
+		"IsThisWeek": start.Format(store.DateLayout) == s.thisWeek(),
+		"Weekdays":   []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"},
 	})
 }
 

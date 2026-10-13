@@ -511,6 +511,7 @@ select:disabled { opacity: .6; }
 
 /* Calendar */
 .cal-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+.cal-filter select { width: auto; min-width: 10rem; }
 .cal-grid { display: none; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .cal-grid__head, .cal-grid__week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .cal-grid__head div { padding: 6px 8px; font-weight: 600; font-size: .85rem; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--border); }

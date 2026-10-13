@@ -20,16 +20,34 @@
   {{with .Room.Notes}}<p>{{range lines .}}{{.}}<br>{{end}}</p>{{end}}
 </div>
 <section class="section">
-  <h2 class="section__title">Next {{.Weeks}} weeks</h2>
+  <div class="page-head">
+    <div><h2 class="section__title">{{.Week}}</h2></div>
+    <div class="page-head__actions">
+      <a class="btn btn--sm" href="{{.PrevURL}}" rel="prev">&larr; Previous week</a>
+      {{if not .IsThisWeek}}<a class="btn btn--sm" href="/rooms/{{.Room.ID}}">This week</a>{{end}}
+      <a class="btn btn--sm" href="{{.NextURL}}" rel="next">Next week &rarr;</a>
+    </div>
+  </div>
+  <div class="cal-grid" role="table" aria-label="{{.Room.Name}}, {{.Week}}">
+    <div class="cal-grid__head" role="row">
+      {{range .Weekdays}}<div role="columnheader">{{.}}</div>{{end}}
+    </div>
+    <div class="cal-grid__week" role="row">
+      {{range .Days}}
+        <div class="cal-cell{{if .Today}} cal-cell--today{{end}}" role="cell">
+          <div class="cal-cell__day">{{.Day}}</div>
+          {{range .Items}}{{template "cal-item" (dict "I" . "User" $.User)}}{{end}}
+        </div>
+      {{end}}
+    </div>
+  </div>
   <div class="cal-agenda">
-    {{range .Bookings}}
+    {{range .Days}}{{if .Items}}
       <section class="cal-agenda__day">
-        <h3>{{fmtDate .StartsOn}}</h3>
-        {{template "booking-item" (dict "B" . "User" $.User)}}
+        <h3>{{fmtDate .Date}}{{if .Today}} <span class="badge">Today</span>{{end}}</h3>
+        {{range .Items}}{{template "cal-item" (dict "I" . "User" $.User)}}{{end}}
       </section>
-    {{else}}
-      <p class="muted">Nothing booked in {{.Room.Name}} for the next {{.Weeks}} weeks.</p>
-    {{end}}
+    {{end}}{{end}}
   </div>
 </section>
 {{end}}
