@@ -118,6 +118,12 @@ func (s *Server) handleBookingShow(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data["Conflicts"] = clashes
+		if b.Source == store.SourceRequest {
+			if data["RequestID"], err = s.store.RequestForBooking(b.ID); err != nil {
+				s.serverError(w, r, err)
+				return
+			}
+		}
 	}
 	s.render(w, r, http.StatusOK, "bookings/show", data)
 }
@@ -212,26 +218,33 @@ func readBooking(r *http.Request, b *store.Booking) ([]int64, []string) {
 	if !slices.Contains(store.BookingStatuses, b.Status) {
 		errs = append(errs, "Pick a status.")
 	}
-	if !validDate(b.StartsOn) {
+	return rooms, append(errs, checkWhen(b.StartsOn, b.StartTime, b.EndsOn, b.EndTime)...)
+}
+
+// checkWhen checks a block of time as the booking and request forms take
+// it (EndsOn "" when it's the same day).
+func checkWhen(startsOn, startTime, endsOn, endTime string) []string {
+	var errs []string
+	if !validDate(startsOn) {
 		errs = append(errs, "Pick the day it starts.")
 	}
-	if b.EndsOn != "" && (!validDate(b.EndsOn) || b.EndsOn < b.StartsOn) {
+	if endsOn != "" && (!validDate(endsOn) || endsOn < startsOn) {
 		errs = append(errs, "It can't end before the day it starts.")
 	}
 	timesOK := true
-	for _, t := range []string{b.StartTime, b.EndTime} {
+	for _, t := range []string{startTime, endTime} {
 		if t != "" && !validTime(t) {
 			errs = append(errs, "Times look like 18:30.")
 			timesOK = false
 			break
 		}
 	}
-	if timesOK && b.EndTime != "" && b.StartTime == "" {
-		errs = append(errs, "Add a start time, or clear the end time for an all-day booking.")
-	} else if timesOK && b.EndsOn == "" && b.EndTime != "" && b.EndTime <= b.StartTime {
+	if timesOK && endTime != "" && startTime == "" {
+		errs = append(errs, "Add a start time, or clear the end time for all day.")
+	} else if timesOK && endsOn == "" && endTime != "" && endTime <= startTime {
 		errs = append(errs, "It has to end after it starts.")
 	}
-	return rooms, errs
+	return errs
 }
 
 // alignToRule moves a new booking (and rule.Start) to the first date its

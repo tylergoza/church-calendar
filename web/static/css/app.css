@@ -468,6 +468,16 @@ select:disabled { opacity: .6; }
 .pick-list { list-style: none; padding: 0; margin: 12px 0; display: flex; flex-direction: column; }
 .pick-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 0; border-top: 1px solid var(--border); }
 .pick-list li:first-child { border-top: 0; }
+
+/* Room requests */
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.avail { font-size: .85rem; color: var(--muted); text-align: right; }
+.avail--free { color: var(--upcoming); font-weight: 600; }
+.avail--busy { color: var(--overdue); }
+.badge--request-waiting { background: var(--due-soon-bg); color: var(--due-soon); }
+.badge--request-approved { background: var(--upcoming-bg); color: var(--upcoming); }
+.badge--request-declined { background: var(--overdue-bg); color: var(--overdue); }
+.badge--request-withdrawn { background: var(--surface-2); color: var(--muted); }
 .need-add { display: flex; gap: 6px; align-items: center; margin: 0; }
 .need-add .need-add__qty { width: 72px; min-height: 34px; padding: 4px 8px; }
 .need-add .need-add__dept { width: auto; min-height: 34px; padding: 4px 8px; font-size: .9rem; }

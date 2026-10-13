@@ -21,3 +21,6 @@
 
 {{/* Who can see a booking outside the app. Pass "public", "private" or "locked". */}}
 {{define "visibility-badge"}}{{if eq . "public"}}<span class="badge badge--public" title="Shows on the public calendar">Public</span>{{else if eq . "locked"}}<span class="badge badge--locked" title="Only its rooms and times show, even to members">Locked</span>{{else}}<span class="badge badge--locked" title="Outside the app it only shows that its rooms are busy">Private</span>{{end}}{{end}}
+
+{{/* A room request's status. Pass "waiting", "approved", "declined" or "withdrawn". */}}
+{{define "request-status"}}<span class="badge badge--request-{{.}}">{{requestStatusLabel .}}</span>{{end}}

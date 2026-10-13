@@ -8,6 +8,10 @@
       <label for="site_name">Site name</label>
       <input id="site_name" name="site_name" value="{{.SiteNameValue}}" required>
     </div>
+    <div class="field">
+      <label class="check"><input type="checkbox" name="public_requests" value="1" {{if .PublicRequests}}checked{{end}}> Let visitors ask for rooms</label>
+      <p class="hint">Off: only people who sign in can ask. On: anyone can send a request from the public calendar. Requests wait for a scheduler either way, and each address can send a few an hour.</p>
+    </div>
     <div class="form__actions"><button type="submit" class="btn btn--primary">Save settings</button></div>
   </form>
   <p class="hint">Links to the maintenance tracker and the event planner are on <a href="/admin/connections">Connections</a>.</p>

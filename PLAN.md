@@ -5,7 +5,7 @@ event, rehearsal, meeting and room booking on one calendar, with room
 conflicts caught across all the apps. People (inside or outside the church)
 can also ask for a room here.
 
-Status: step 3 (public calendar and feeds) built (2026-10-13).
+Status: step 4 (room requests) built (2026-10-13).
 
 ## The idea in one paragraph
 
@@ -326,12 +326,12 @@ Each step is a working app; stop after any of them.
 - [x] Tests: visibility table above, one test per cell (plus the visitor feed)
 
 ### 4. Room requests
-- [ ] `/request` form with live availability (Stimulus controller hitting a same-origin JSON endpoint)
-- [ ] Public requests setting (off by default); honeypot field and per-IP rate limit
-- [ ] `/request/{id}?code=…` status page for the person who asked
-- [ ] `/requests` for schedulers: approve (makes a `request` booking), decline with a note
-- [ ] Rooms with `needs_approval` off book straight away for members
-- [ ] Tests: approve makes exactly one booking; double-approve is refused
+- [x] `/request` form with live availability (`availability` controller hitting `/request/availability`, which gives busy times only, never titles). Only bookable, unarchived rooms; days from today on. Members see their own requests under the form
+- [x] Public requests setting on `/admin/settings` (off by default; visitors are sent to sign in); honeypot field (`website`, answered like a success) and 5 sent requests an hour per IP
+- [x] `/request/{id}?code=…` status page for the person who asked (members who sent it and schedulers need no code), with **Withdraw** while it waits
+- [x] `/requests` for schedulers (Waiting / Approved / Declined / Withdrawn, "Rooms busy" marker) and `/requests/{id}`: approve (makes a `request` booking, private or public, with an optional note; the request's details aren't copied), decline with a note. A `request` booking links back to its request. **Make this an event** waits for `replaces` in step 5
+- [x] Rooms with `needs_approval` off book straight away for members, but only when every room picked is free then; otherwise the request waits. Visitors always wait
+- [x] Tests: approve makes exactly one booking; double-approve is refused (409), plus busy-room rules, honeypot, rate limit, withdraw and visibility of the status page
 
 ### 5. Push API for apps
 - [ ] Source tokens (kind `source`, tied to one source)

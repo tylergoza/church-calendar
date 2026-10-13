@@ -172,6 +172,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "calendar/index", map[string]any{
 		"Title":        first.Format("January 2006"),
 		"PublicHeader": currentUser(r) == nil,
+		"CanRequest":   s.canRequest(r),
 		"Month":        first.Format("2006-01"),
 		"Heading":      first.Format("January 2006"),
 		"Grid":         grid,
