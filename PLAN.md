@@ -77,8 +77,8 @@ Same as the siblings (copy from `../event_planning`, the newest):
 | Role | Can |
 |------|-----|
 | `member` | See private bookings in full (not locked ones), book free rooms on `/request`, change or cancel their own bookings |
-| `scheduler` | Also make and edit hand-made bookings, approve or turn down visitors' requests, cancel any hand-made or request booking (with a note), manage rooms, see and resolve conflicts |
-| `admin` | Also users (local login), API tokens, connected apps, settings |
+| `scheduler` | Also make and edit hand-made bookings, approve or turn down visitors' requests, cancel any hand-made or request booking (with a note), see and resolve conflicts |
+| `admin` | Also rooms (add, edit, import from the tracker), equipment, users (local login), API tokens, connected apps, settings |
 
 Visitors (not signed in) see the public calendar and can ask for a room
 with their name and phone number (public requests are on unless an admin

@@ -43,7 +43,7 @@
         {{range .Rooms}}<label class="check"><input type="checkbox" name="room" value="{{.ID}}" {{if index $.Picked .ID}}checked{{end}}> {{.Name}}{{if .Archived}} <span class="muted small">(archived)</span>{{end}}</label>{{end}}
       </div>
       {{else}}
-      <p class="hint">No rooms yet. {{if .User.CanSchedule}}<a href="/rooms/new">Add a room</a> first, or save this without one.{{end}}</p>
+      <p class="hint">No rooms yet. {{if .User.IsAdmin}}<a href="/rooms/new">Add a room</a> first, or save{{else}}An administrator adds them; you can save{{end}} this without one.</p>
       {{end}}
     </fieldset>
     {{template "equipment-fields" .Equip}}

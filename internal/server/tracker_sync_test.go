@@ -150,7 +150,7 @@ func TestRoomFormAndRequestGrouping(t *testing.T) {
 	tr := fakeTrackerApp(t, &places)
 	env := map[string]string{"TRACKER_URL": tr.URL, "TRACKER_TOKEN": "mt_good1234"}
 	c, st := newTestServerWith(t, Config{Env: func(k string) string { return env[k] }})
-	st.CreateUser("sam", "", "a long password", store.RoleScheduler)
+	st.CreateUser("sam", "", "a long password", store.RoleAdmin)
 	sched := c.as("sam")
 	if _, err := st.ImportRooms([]store.TrackerPlace{
 		{ID: 2, Label: "Main building", Name: "Main building", Kind: "building", Bookable: true},
@@ -402,7 +402,7 @@ func TestEquipmentSyncPage(t *testing.T) {
 	}
 	f.serve(t)
 	c, st := newTestServerWith(t, f.config())
-	st.CreateUser("sam", "", "a long password", store.RoleScheduler)
+	st.CreateUser("sam", "", "a long password", store.RoleAdmin)
 	sched := c.as("sam")
 	if body := sched.get("/rooms/import", 200); !strings.Contains(body, "No equipment comes from the tracker yet") {
 		t.Errorf("before the sync:\n%s", body)

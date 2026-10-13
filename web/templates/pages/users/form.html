@@ -22,7 +22,7 @@
         <option value="scheduler" {{if eq .Form.Role "scheduler"}}selected{{end}}>Scheduler</option>
         <option value="admin" {{if eq .Form.Role "admin"}}selected{{end}}>Administrator</option>
       </select>
-      <p class="hint">Members see private bookings in full (not locked ones) and can ask for rooms. Schedulers also make and edit bookings, answer room requests, manage rooms and resolve conflicts. Administrators also manage users, API tokens, connections, settings and backups.</p>
+      <p class="hint">Members see private bookings in full (not locked ones) and can ask for rooms. Schedulers also make and edit bookings, answer room requests and resolve conflicts. Administrators also manage rooms, equipment, users, API tokens, connections, settings and backups.</p>
     </div>
     <fieldset class="fieldset">
       <legend>{{if .Form.ID}}Reset password <span class="optional">leave blank to keep current</span>{{else}}Password{{end}}</legend>

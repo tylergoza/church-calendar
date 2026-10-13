@@ -8,7 +8,7 @@
   {{if .User.CanSchedule}}
   <div class="page-head__actions">
     {{if not .Room.Archived}}<a class="btn btn--primary" href="/bookings/new?room={{.Room.ID}}">Book this room</a>{{end}}
-    <a class="btn btn--ghost" href="/rooms/{{.Room.ID}}/edit">Edit</a>
+    {{if .User.IsAdmin}}<a class="btn btn--ghost" href="/rooms/{{.Room.ID}}/edit">Edit</a>{{end}}
   </div>
   {{end}}
 </div>
