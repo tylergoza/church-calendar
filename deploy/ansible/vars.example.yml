@@ -1,0 +1,54 @@
+# Copy to vars.yml (gitignored) and fill in. Anything in defaults.yml can be
+# overridden here too.
+
+# Public address of the app. Caddy gets its HTTPS certificate for this name.
+app_domain: calendar.example.org
+# The domain as added under Networking → Domains in DigitalOcean, with your
+# registrar's nameservers pointed at ns1/ns2/ns3.digitalocean.com. The
+# provision play creates the A record for app_domain in it.
+dns_zone: example.org
+
+# Project to put the droplet in (Projects in the control panel sidebar).
+do_project: My Project
+
+# Datacenter, droplet size and OS. These are the defaults: New York 3,
+# $6/month, Ubuntu 26.04.
+do_region: nyc3
+do_size: s-1vcpu-1gb
+do_image: ubuntu-26-04-x64
+# Share the maintenance tracker's droplet (the default), or set both of
+# these to church-calendar for a droplet of its own.
+droplet_name: maintenance-tracker
+# do_tag: maintenance-tracker
+
+# Extra droplet tags, e.g. ones your own cloud firewalls target. If those
+# firewalls already allow SSH/HTTP/HTTPS, also turn off the play's own.
+# do_extra_tags: [website, ssh]
+# do_firewall: false
+
+# A dedicated deploy key (see the tracker's README) instead of your default ssh setup.
+# ssh_private_key_file: ~/.ssh/maintenance_deploy
+# ssh_identity_agent: SSH_AUTH_SOCK   # if ~/.ssh/config sends ssh to another agent
+# Your own keys (e.g. on a YubiKey) for logging in by hand alongside it.
+# ssh_authorized_keys: [~/.ssh/id_ed25519_sk.pub]
+
+# tz: America/Chicago
+
+# Connections are optional. Leave each blank to manage it in the app on
+# /admin/connections; a value here is fixed in the app. Tokens and secrets come
+# from the Keychain through with-cal / with-um (README: Deploying).
+
+# The maintenance tracker, for importing rooms (token from CAL_TRACKER_TOKEN,
+# via with-cal). Leave blank to manage it on /admin/connections.
+# tracker_url: https://maintenance.example.org
+
+# The event planner's address, for "Make this an event" (no token).
+# events_url: https://events.example.org
+
+# Single sign-on through User Management (secret from UM_CALENDAR_SECRET, via
+# with-um). Leave sso_url blank to manage SSO on /admin/connections. Setting
+# it here means SSO is the expected setup; remove sso_url and redeploy to fall
+# back to the calendar's own local login. Break-glass if User Management is
+# down: `local-login on` on the droplet (README: Single sign-on).
+sso_url: https://accounts.example.org
+base_url: https://calendar.example.org   # sign-in returns to base_url/auth/callback

@@ -1,0 +1,299 @@
+# Tests and builds the Linux binary on this machine, then installs it, the
+# systemd unit and its Caddy site on every droplet tagged do_tag. The database
+# (and secrets.key beside it) is backed up first whenever the binary changes
+# (migrations run on start).
+#
+#   with-do with-um make deploy      # from the repo root; DIGITALOCEAN_TOKEN comes from the Keychain
+#
+# To roll back, check out the previous commit and deploy it. If its
+# migrations changed the database, restore the pre-deploy backup as well
+# (README: Moving between hosts).
+
+- name: Build
+  hosts: localhost
+  gather_facts: false
+  vars_files: [defaults.yml, vars.yml]
+  vars:
+    repo_root: "{{ playbook_dir | dirname | dirname }}"
+  tasks:
+    # Before building, so a half-set SSO never reaches the droplet (the app
+    # won't start with SSO_URL but no client secret).
+    - name: Check the single sign-on settings
+      ansible.builtin.assert:
+        that:
+          - sso_client_secret | length > 0
+          - base_url | length > 0
+        fail_msg: >-
+          sso_url is set, so SSO needs its client secret (UM_CALENDAR_SECRET)
+          and base_url. Run through with-um (e.g. `with-do with-um make deploy`,
+          and the same for provision, which ends with a deploy); it reads the
+          Keychain item um-calendar that `make register-app APP=calendar
+          DRY_RUN=false` in user_management saves. Set base_url in vars.yml to
+          the calendar's public https address. Or unset sso_url to keep SSO off.
+        quiet: true
+      when: sso_url | length > 0
+
+    - name: Run the tests
+      ansible.builtin.command:
+        cmd: make test
+        chdir: "{{ repo_root }}"
+      when: not skip_tests | bool
+      changed_when: false
+
+    - name: Build the binary
+      ansible.builtin.command:
+        cmd: make build-linux
+        chdir: "{{ repo_root }}"
+      changed_when: true
+
+    - name: Find the droplets
+      ansible.builtin.include_tasks: tasks/find_droplets.yml
+
+    - name: Check there's somewhere to deploy to
+      ansible.builtin.assert:
+        that: groups['app'] | default([]) | length > 0
+        fail_msg: No droplets are tagged {{ do_tag }}. Run provision.yml first.
+        quiet: true
+
+- name: Install
+  hosts: app
+  gather_facts: false
+  vars_files: [defaults.yml, vars.yml]
+  vars:
+    binary: "{{ playbook_dir | dirname | dirname }}/bin/church-calendar-linux-amd64"
+    # Commands run as the service user so the files they write stay its own.
+    # runuser rather than become: Ubuntu 26.04's default sudo is sudo-rs.
+    calendar: [runuser, -u, calendar, --, /usr/local/bin/church-calendar, -db, "{{ app_db }}"]
+  handlers:
+    - name: Restart the app
+      ansible.builtin.systemd_service:
+        name: church-calendar
+        state: restarted
+        daemon_reload: true
+
+    - name: Reload Caddy
+      ansible.builtin.systemd_service:
+        name: caddy
+        state: reloaded
+  tasks:
+    - name: Checksum the new binary
+      ansible.builtin.stat:
+        path: "{{ binary }}"
+      delegate_to: localhost
+      register: new_binary
+
+    - name: Checksum the installed binary
+      ansible.builtin.stat:
+        path: /usr/local/bin/church-calendar
+      register: old_binary
+
+    - name: Check for a database
+      ansible.builtin.stat:
+        path: "{{ app_db }}"
+      register: db
+
+    # secrets.key encrypts the saved tokens; it sits beside the database and is
+    # backed up with it (the app creates it on first start, so it may be missing).
+    - name: Check for the secrets key
+      ansible.builtin.stat:
+        path: "{{ app_data_dir }}/secrets.key"
+      register: secrets_key
+
+    - name: Decide whether to back up
+      ansible.builtin.set_fact:
+        needs_backup: "{{ db.stat.exists and old_binary.stat.checksum | default('') != new_binary.stat.checksum }}"
+
+    # One stem for both files, so a backup is always the .db and its .key together.
+    - name: Name the pre-deploy backup
+      ansible.builtin.set_fact:
+        backup_stem: "{{ app_backup_dir ~ '/pre-deploy-' ~ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}"
+      when: needs_backup
+
+    - name: Back up the database
+      ansible.builtin.command:
+        argv: "{{ calendar + ['backup', backup_stem ~ '.db'] }}"
+      when: needs_backup
+      changed_when: true
+
+    - name: Back up the secrets key
+      ansible.builtin.copy:
+        src: "{{ app_data_dir }}/secrets.key"
+        dest: "{{ backup_stem ~ '.key' }}"
+        remote_src: true
+        owner: calendar
+        group: calendar
+        mode: "0600"
+      when: needs_backup and secrets_key.stat.exists
+
+    - name: Install the binary
+      ansible.builtin.copy:
+        src: "{{ binary }}"
+        dest: /usr/local/bin/church-calendar
+        mode: "0755"
+      notify: Restart the app
+
+    - name: Install the systemd unit
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../church-calendar.service"
+        dest: /etc/systemd/system/church-calendar.service
+        mode: "0644"
+      notify: Restart the app
+
+    - name: Create the unit's drop-in folder
+      ansible.builtin.file:
+        path: /etc/systemd/system/church-calendar.service.d
+        state: directory
+        mode: "0755"
+
+    # The unit in the repo has a placeholder TZ; this overrides it. Each
+    # connection goes here when it's set, which locks it in the app's
+    # Connections page. Blank means the app's saved settings are used, so
+    # unset a value and redeploy to hand it back to the app (after Keep in
+    # settings). So does single sign-on when sso_url is set (unset it and
+    # redeploy to turn SSO off; `local-login on` is the break-glass). Readable
+    # by root only: it holds the API tokens and the SSO client secret.
+    - name: Set the time zone and the connections (tracker, single sign-on, event planner)
+      ansible.builtin.copy:
+        content: |
+          [Service]
+          Environment=TZ={{ tz }}
+          {% if tracker_url %}
+          Environment="TRACKER_URL={{ tracker_url }}"
+          {% endif %}
+          {% if tracker_token %}
+          Environment="TRACKER_TOKEN={{ tracker_token }}"
+          {% endif %}
+          {% if sso_url %}
+          Environment="SSO_URL={{ sso_url }}"
+          Environment="SSO_INTERNAL_URL={{ sso_internal_url }}"
+          Environment="SSO_CLIENT_ID={{ sso_client_id }}"
+          Environment="SSO_CLIENT_SECRET={{ sso_client_secret }}"
+          Environment="BASE_URL={{ base_url }}"
+          {% endif %}
+          {% if events_url %}
+          Environment="EVENTS_URL={{ events_url }}"
+          {% endif %}
+        dest: /etc/systemd/system/church-calendar.service.d/override.conf
+        mode: "0600"
+      no_log: true
+      notify: Restart the app
+
+    # The droplet can be shared with the maintenance tracker: each app puts
+    # its own site in /etc/caddy/sites/ and the main Caddyfile (the same in
+    # both repos) imports them all.
+    - name: Read the current Caddyfile
+      ansible.builtin.slurp:
+        src: /etc/caddy/Caddyfile
+      register: caddyfile
+      failed_when: false
+
+    # An older tracker deploy wrote the whole Caddyfile with its site in it.
+    # Replacing that would take the tracker offline, so stop instead.
+    - name: Check the Caddyfile can be replaced
+      vars:
+        current: "{{ (caddyfile.content | default('') | b64decode) }}"
+      ansible.builtin.assert:
+        that: >-
+          'import /etc/caddy/sites/*.caddy' in current
+          or 'Managed by deploy/ansible' not in current
+        fail_msg: >-
+          /etc/caddy/Caddyfile was written by an older maintenance tracker deploy.
+          Deploy the updated maintenance tracker first (it moves its site into
+          /etc/caddy/sites/), then run this again.
+        quiet: true
+
+    - name: Create the Caddy sites folder
+      ansible.builtin.file:
+        path: /etc/caddy/sites
+        state: directory
+        mode: "0755"
+
+    # Before the main file, so its import never finds an empty folder.
+    - name: Install this app's Caddy site
+      ansible.builtin.template:
+        src: Caddyfile.j2
+        dest: /etc/caddy/sites/church-calendar.caddy
+        mode: "0644"
+        validate: caddy validate --adapter caddyfile --config %s
+      notify: Reload Caddy
+
+    - name: Install the main Caddyfile
+      ansible.builtin.copy:
+        content: |
+          # Managed by deploy/ansible in each app's repo; edits here are overwritten.
+          # Each app puts its own site in /etc/caddy/sites/.
+          import /etc/caddy/sites/*.caddy
+        dest: /etc/caddy/Caddyfile
+        mode: "0644"
+        validate: caddy validate --adapter caddyfile --config %s
+      notify: Reload Caddy
+
+    # Before the app first starts, so /setup is never reachable. Not with
+    # SSO: people come from User Management and /setup is off.
+    - name: Create the admin user
+      when: not db.stat.exists and not sso_url
+      vars:
+        password: "{{ admin_password or lookup('ansible.builtin.password', '/dev/null', length=24, chars=['ascii_letters', 'digits']) }}"
+      block:
+        - name: Pick the admin password
+          ansible.builtin.set_fact:
+            new_admin_password: "{{ password }}"
+          no_log: true
+
+        - name: Create {{ admin_username }}
+          ansible.builtin.command:
+            argv: "{{ calendar + ['create-user', admin_username, '--admin'] }}"
+            stdin: "{{ new_admin_password }}"
+          no_log: true
+          changed_when: true
+
+    - name: Start the app
+      ansible.builtin.systemd_service:
+        name: church-calendar
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Apply restarts and reloads
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait for the app to answer
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8120/healthz
+      register: health
+      until: health.status == 200
+      retries: 15
+      delay: 2
+
+    - name: Find old pre-deploy backups
+      ansible.builtin.find:
+        paths: "{{ app_backup_dir }}"
+        patterns: ["pre-deploy-*.db", "pre-deploy-*.key"]
+      register: backups
+
+    # A backup is its .db and .key together: keep the newest {{ keep_backups }} .db
+    # files and every .key that goes with one of them. Anything else goes.
+    - name: Remove all but the newest {{ keep_backups }}
+      vars:
+        newest_stems: "{{ (backups.files | selectattr('path', 'match', '.*\\.db$') | sort(attribute='mtime', reverse=true) | map(attribute='path') | map('regex_replace', '\\.db$', '') | list)[:keep_backups | int] }}"
+        kept_paths: "{{ (newest_stems | map('regex_replace', '$', '.db') | list) + (newest_stems | map('regex_replace', '$', '.key') | list) }}"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ backups.files | map(attribute='path') | difference(kept_paths) }}"
+      loop_control:
+        label: "{{ item | basename }}"
+
+    # Warn about what's still unset: the app's Connections page takes those.
+    - name: Done
+      vars:
+        unset_connections: >-
+          {{ (['maintenance tracker'] if not (tracker_url and tracker_token) else [])
+             + (['event planner'] if not events_url else []) }}
+        hint: "{{ (' Connect the ' ~ (unset_connections | join(' and ')) ~ ' on /admin/connections (or set it in vars.yml).') if unset_connections else '' }}"
+      ansible.builtin.debug:
+        msg: >-
+          {{ ('Running at https://' ~ app_domain ~ '.'
+              ~ (' Sign in as ' ~ admin_username ~ ' with password ' ~ new_admin_password ~ ', and change it.' if new_admin_password is defined else '')
+              if new_admin_password is defined else 'Deployed to https://' ~ app_domain ~ '.')
+             ~ hint }}
