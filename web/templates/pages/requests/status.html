@@ -1,0 +1,41 @@
+{{define "content"}}
+{{$q := .Request}}
+{{if and .User .User.CanSchedule}}<nav class="crumbs" aria-label="Breadcrumb"><a href="/requests/{{$q.ID}}">Answer this request</a></nav>{{end}}
+<div class="page-head"><div>
+  <h1>{{$q.Title}} {{template "request-status" $q.Status}}</h1>
+  <p class="muted">Asked by {{$q.Name}} on {{fmtTime $q.CreatedAt}}</p>
+</div></div>
+<div class="card narrow">
+  <dl class="details">
+    <div><dt>When</dt><dd>{{$q.When}}</dd></div>
+    <div><dt>Rooms</dt><dd>{{$q.RoomNames}}</dd></div>
+    {{if $q.ExpectedCount}}<div><dt>People</dt><dd>{{$q.ExpectedCount}}</dd></div>{{end}}
+  </dl>
+  {{if eq $q.Status "waiting"}}
+    <p>A scheduler hasn't answered yet. Check back here.</p>
+  {{else if eq $q.Status "approved"}}
+    <p><strong>Approved.</strong> The rooms are booked for you.{{if and .User $q.BookingID}} <a href="/calendar/{{$q.BookingID}}">See the booking</a>.{{end}}</p>
+  {{else if eq $q.Status "declined"}}
+    <p><strong>Sorry, this request was turned down.</strong></p>
+  {{else}}
+    <p>You withdrew this request.</p>
+  {{end}}
+  {{with $q.Answer}}<div class="notes"><p class="muted small">Note from the church:</p>{{range lines .}}<p>{{.}}</p>{{end}}</div>{{end}}
+</div>
+<div class="card narrow">
+  <h2 class="section__title">Keep this link</h2>
+  <p class="muted small">It's the only way back to this page{{if not .User}} without signing in{{end}}. Anyone with it can see this request.</p>
+  <code class="token">{{.Link}}</code>
+</div>
+{{if $q.Waiting}}
+<div class="card narrow danger-zone">
+  <h2 class="section__title">Don't need it any more?</h2>
+  <form method="post" action="/request/{{$q.ID}}/withdraw" class="inline-form"
+        data-controller="confirm" data-confirm-message-value="Withdraw this request?" data-action="submit->confirm#check">
+    {{template "csrf" .CSRF}}
+    <input type="hidden" name="code" value="{{.Code}}">
+    <button type="submit" class="btn btn--danger-ghost btn--sm">Withdraw request</button>
+  </form>
+</div>
+{{end}}
+{{end}}

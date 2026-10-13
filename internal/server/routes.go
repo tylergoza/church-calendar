@@ -46,6 +46,14 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /calendar/{id}", s.handleBookingShow)
 	mux.HandleFunc("GET /calendar/by-source/{source}/{source_id}", s.handleBookingBySource)
 
+	// Room requests: signed-in people, and visitors when public requests
+	// are on (the handlers check). The status page needs the link's code.
+	mux.HandleFunc("GET /request", s.handleRequestNew)
+	mux.HandleFunc("POST /request", s.handleRequestCreate)
+	mux.HandleFunc("GET /request/availability", s.handleRequestAvailability)
+	mux.HandleFunc("GET /request/{id}", s.handleRequestStatus)
+	mux.HandleFunc("POST /request/{id}/withdraw", s.handleRequestWithdraw)
+
 	auth("GET /account", s.handleAccount)
 	auth("POST /account/password", s.handleAccountPassword)
 	auth("GET /rooms", s.handleRooms)
@@ -63,6 +71,10 @@ func (s *Server) routes() http.Handler {
 	sched("POST /bookings/{id}", s.handleBookingUpdate)
 	sched("POST /bookings/{id}/delete", s.handleBookingDelete)
 	sched("POST /bookings/{id}/end-series", s.handleBookingEndSeries)
+	sched("GET /requests", s.handleRequests)
+	sched("GET /requests/{id}", s.handleRequestShow)
+	sched("POST /requests/{id}/approve", s.handleRequestApprove)
+	sched("POST /requests/{id}/decline", s.handleRequestDecline)
 	sched("GET /conflicts", s.handleConflicts)
 	sched("POST /conflicts/ok", s.handleConflictOK)
 
@@ -114,7 +126,8 @@ func isCookieFree(path string) bool {
 
 // isPublicPath paths are open to visitors; signed-in people see more.
 func isPublicPath(path string) bool {
-	return path == "/" || path == "/calendar" || strings.HasPrefix(path, "/calendar/") || isCookieFree(path)
+	return path == "/" || path == "/calendar" || strings.HasPrefix(path, "/calendar/") ||
+		path == "/request" || strings.HasPrefix(path, "/request/") || isCookieFree(path)
 }
 
 // Middleware -------------------------------------------------------------

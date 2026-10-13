@@ -1,0 +1,71 @@
+{{define "content"}}
+{{$q := .Request}}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/requests?status={{$q.Status}}">Requests</a></nav>
+<div class="page-head">
+  <div>
+    <h1>{{$q.Title}} {{template "request-status" $q.Status}}</h1>
+    <p class="muted">Asked {{fmtTime $q.CreatedAt}}</p>
+  </div>
+  <div class="page-head__actions"><a class="btn btn--ghost btn--sm" href="/request/{{$q.ID}}">What they see</a></div>
+</div>
+{{template "errors" .Errors}}
+<div class="card">
+  <dl class="details">
+    <div><dt>When</dt><dd>{{$q.When}}</dd></div>
+    <div><dt>Rooms</dt><dd>{{range $i, $r := $q.Rooms}}{{if $i}}, {{end}}<a href="/rooms/{{$r.RoomID}}">{{$r.Name}}</a>{{with index $.Capacity $r.RoomID}} <span class="muted small">(up to {{.}})</span>{{end}}{{end}}</dd></div>
+    <div><dt>People</dt><dd>{{if $q.ExpectedCount}}{{$q.ExpectedCount}}{{else}}<span class="muted">Not given</span>{{end}}</dd></div>
+    <div><dt>Asked by</dt><dd>{{$q.Name}}{{with .Asker}} <span class="muted small">({{.Username}})</span>{{end}}<br>{{$q.Contact}}</dd></div>
+  </dl>
+  {{with $q.Details}}<div class="notes">{{range lines .}}<p>{{.}}</p>{{end}}</div>{{end}}
+  {{if $q.BookingID}}<p><a href="/calendar/{{$q.BookingID}}">See the booking</a></p>{{end}}
+  {{with $q.Answer}}<p class="muted small">Note back: {{.}}</p>{{end}}
+</div>
+{{if $q.Waiting}}
+  {{if .Busy}}
+  <div class="card card--alert">
+    <h2 class="section__title">Already booked then</h2>
+    <p class="muted small">Approving still books it; the clash then shows on Conflicts.</p>
+    <ul class="pick-list">
+      {{range $q.Rooms}}{{range index $.Busy .RoomID}}
+      <li><span><strong>{{.RoomNames}}:</strong> {{if canSee . $.User}}<a href="/calendar/{{.ID}}">{{.Title}}</a>{{else}}Busy{{end}} · {{.When}}</span></li>
+      {{end}}{{end}}
+    </ul>
+  </div>
+  {{else}}
+  <p class="muted">The rooms are free then.</p>
+  {{end}}
+<div class="two-col">
+  <div class="card">
+    <h2 class="section__title">Approve</h2>
+    <form method="post" action="/requests/{{$q.ID}}/approve" class="form">
+      {{template "csrf" .CSRF}}
+      <fieldset class="fieldset">
+        <legend>Who can see the details</legend>
+        <div class="segmented">
+          <label><input type="radio" name="visibility" value="private" checked> Private</label>
+          <label><input type="radio" name="visibility" value="public"> Public</label>
+        </div>
+        <p class="hint">The details they wrote aren't copied to the booking. Edit it afterwards to add a public description.</p>
+      </fieldset>
+      <div class="field">
+        <label for="approve-answer">Note to them <span class="optional">optional</span></label>
+        <textarea id="approve-answer" name="answer" rows="2" maxlength="4000" placeholder="e.g. The key is in the office."></textarea>
+      </div>
+      <div class="form__actions"><button type="submit" class="btn btn--primary">Approve and book</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2 class="section__title">Turn down</h2>
+    <form method="post" action="/requests/{{$q.ID}}/decline" class="form">
+      {{template "csrf" .CSRF}}
+      <div class="field">
+        <label for="decline-answer">Note to them</label>
+        <textarea id="decline-answer" name="answer" rows="3" maxlength="4000" placeholder="e.g. The Lifecenter is taken that night; the Chapel is free."></textarea>
+        <p class="hint">They see this on their link. Say why, and what might work instead.</p>
+      </div>
+      <div class="form__actions"><button type="submit" class="btn btn--danger-ghost">Turn down</button></div>
+    </form>
+  </div>
+</div>
+{{end}}
+{{end}}

@@ -1,0 +1,81 @@
+{{define "content"}}
+<div class="page-head"><div>
+  <h1>Ask for a room</h1>
+  <p class="muted">Pick the day, the times and the rooms. Each room shows whether it's free as you go. A scheduler looks at every request{{if .User}}, unless the rooms don't need approval and are free: then they're booked straight away{{end}}.</p>
+</div></div>
+<div class="card narrow">
+  {{template "errors" .Errors}}
+  <form method="post" action="/request" class="form"
+        data-controller="availability" data-availability-url-value="/request/availability"
+        data-action="change->availability#check">
+    {{template "csrf" .CSRF}}
+    {{if not .User}}
+    <div class="hp" aria-hidden="true">
+      <label for="website">Leave this empty</label>
+      <input id="website" name="website" tabindex="-1" autocomplete="off">
+    </div>
+    {{end}}
+    <div class="field-row">
+      <div class="field">
+        <label for="name">Your name</label>
+        <input id="name" name="name" value="{{.Form.Name}}" required maxlength="200" autocomplete="name">
+      </div>
+      <div class="field">
+        <label for="contact">Email or phone</label>
+        <input id="contact" name="contact" value="{{.Form.Contact}}" required maxlength="200" autocomplete="email">
+      </div>
+    </div>
+    <div class="field">
+      <label for="title">What's it for?</label>
+      <input id="title" name="title" value="{{.Form.Title}}" required maxlength="200" placeholder="e.g. Youth group movie night">
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="starts_on">Day</label><input id="starts_on" name="starts_on" type="date" min="{{.Today}}" value="{{.Form.StartsOn}}" required data-availability-target="field"></div>
+      <div class="field"><label for="start_time">From <span class="optional">blank for all day</span></label><input id="start_time" name="start_time" type="time" value="{{.Form.StartTime}}" data-availability-target="field"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="ends_on">Ends <span class="optional">if on a later day</span></label><input id="ends_on" name="ends_on" type="date" min="{{.Today}}" value="{{.Form.EndsOn}}" data-availability-target="field"></div>
+      <div class="field"><label for="end_time">Until <span class="optional">optional</span></label><input id="end_time" name="end_time" type="time" value="{{.Form.EndTime}}" data-availability-target="field"></div>
+    </div>
+    <fieldset class="fieldset">
+      <legend>Rooms</legend>
+      {{if .Rooms}}
+      <ul class="pick-list">
+        {{range .Rooms}}
+        <li>
+          <label class="check"><input type="checkbox" name="room" value="{{.ID}}" {{if index $.Picked .ID}}checked{{end}}> {{.Name}}{{if .Capacity}} <span class="muted small">up to {{.Capacity}}</span>{{end}}</label>
+          <span class="avail" data-availability-target="room" data-room-id="{{.ID}}" aria-live="polite"></span>
+        </li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="hint">There are no rooms to ask for yet.</p>
+      {{end}}
+    </fieldset>
+    <div class="field field--narrow">
+      <label for="expected_count">How many people? <span class="optional">optional</span></label>
+      <input id="expected_count" name="expected_count" type="number" min="0" inputmode="numeric" value="{{if .Form.ExpectedCount}}{{.Form.ExpectedCount}}{{end}}">
+    </div>
+    <div class="field">
+      <label for="details">Anything else? <span class="optional">optional</span></label>
+      <textarea id="details" name="details" rows="4" maxlength="4000">{{.Form.Details}}</textarea>
+      <p class="hint">Only schedulers see this. Setup, equipment, who's in charge on the day.</p>
+    </div>
+    <div class="form__actions">
+      <button type="submit" class="btn btn--primary">Send request</button>
+      <a class="btn btn--ghost" href="/calendar">Cancel</a>
+    </div>
+  </form>
+</div>
+{{with .Mine}}
+<section class="section narrow">
+  <h2 class="section__title">Your requests</h2>
+  <ul class="pick-list card">
+    {{range .}}
+    <li><span><a href="/request/{{.ID}}">{{.Title}}</a><br><span class="muted small">{{.When}} · {{.RoomNames}}</span></span>
+      {{template "request-status" .Status}}</li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+{{end}}

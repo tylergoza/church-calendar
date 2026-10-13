@@ -57,10 +57,13 @@ type Server struct {
 	tmplMu sync.Mutex
 	tmpls  map[string]*template.Template
 
-	siteName atomic.Value
+	siteName       atomic.Value
+	publicRequests atomic.Bool
 
 	limiter *loginLimiter
-	handler http.Handler
+	// requestLimiter counts room requests sent by visitors, per IP.
+	requestLimiter *loginLimiter
+	handler        http.Handler
 }
 
 func New(cfg Config, st *store.Store, logger *slog.Logger) (*Server, error) {
@@ -70,7 +73,8 @@ func New(cfg Config, st *store.Store, logger *slog.Logger) (*Server, error) {
 	if cfg.Env == nil {
 		cfg.Env = os.Getenv
 	}
-	s := &Server{cfg: cfg, store: st, log: logger, limiter: newLoginLimiter(10, 15*time.Minute)}
+	s := &Server{cfg: cfg, store: st, log: logger, limiter: newLoginLimiter(10, 15*time.Minute),
+		requestLimiter: newLoginLimiter(5, time.Hour)}
 	if cfg.Dev {
 		s.webFS = os.DirFS("web")
 	} else {
@@ -106,6 +110,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.S
 
 func (s *Server) reloadSettings() {
 	s.siteName.Store(s.store.Setting("site_name", "Church Calendar"))
+	s.publicRequests.Store(s.store.Setting(publicRequestsSetting, "") == "1")
 }
 
 func (s *Server) SiteName() string { return s.siteName.Load().(string) }
@@ -184,6 +189,7 @@ func (s *Server) funcs() template.FuncMap {
 		"canSee":             func(b store.Booking, u *store.User) bool { return canSeeDetails(&b, u) },
 		"source":             sourceLabel,
 		"bookingStatusLabel": store.BookingStatusLabel,
+		"requestStatusLabel": store.RequestStatusLabel,
 		"add":                func(a, b int) int { return a + b },
 		"pluralize":          pluralize,
 		"lines":              func(t string) []string { return strings.Split(strings.TrimSpace(t), "\n") },

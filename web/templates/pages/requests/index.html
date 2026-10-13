@@ -1,0 +1,28 @@
+{{define "content"}}
+<div class="page-head">
+  <div><h1>Room requests</h1><p class="muted">Approving a request books its rooms. People see the answer, and any note, on the link they were given.</p></div>
+</div>
+<nav class="tabs" aria-label="Requests by status">
+  {{range .Statuses}}<a href="/requests?status={{.}}" {{if eq . $.Status}}aria-current="page"{{end}}>{{requestStatusLabel .}}</a>{{end}}
+</nav>
+{{if .Requests}}
+<div class="table-wrap">
+  <table class="table table--stack">
+    <thead><tr><th>Request</th><th>When</th><th>Rooms</th><th>Asked by</th></tr></thead>
+    <tbody>
+      {{range .Requests}}
+      <tr>
+        <td><a href="/requests/{{.ID}}"><strong>{{.Title}}</strong></a>
+          {{if index $.Clashes .ID}}<span class="badge badge--alert">Rooms busy</span>{{end}}</td>
+        <td data-label="When">{{.When}}</td>
+        <td data-label="Rooms">{{.RoomNames}}</td>
+        <td data-label="Asked by">{{.Name}}<br><span class="muted small">{{fmtTime .CreatedAt}}</span></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="empty">{{if eq .Status "waiting"}}No requests are waiting.{{else}}Nothing here yet.{{end}}</div>
+{{end}}
+{{end}}

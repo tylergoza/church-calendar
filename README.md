@@ -46,6 +46,17 @@ Each role includes the ones before it.
 
 Visitors (not signed in) see the public calendar.
 
+## Room requests
+
+Anyone signed in can **Ask for a room** at `/request`; each room shows
+whether it's free as they pick times. Visitors can too once an admin ticks
+**Let visitors ask for rooms** on **Settings** (off by default; a hidden
+honeypot field and a limit of 5 requests an hour per address keep spam
+down). Schedulers answer on **Requests**: approving books the rooms (source
+"request"), turning down takes a note. A member's request for rooms that
+don't need approval, when they're free, is booked straight away. There's
+no email yet: people get a `/request/{id}?code=…` link to check back on.
+
 ## Reading the calendar from elsewhere
 
 - `/calendar.ics` is the public feed (no token): public bookings, and busy

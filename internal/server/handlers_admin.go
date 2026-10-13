@@ -11,7 +11,7 @@ import (
 // Settings & backup ------------------------------------------------------
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "settings", map[string]any{"Title": "Settings", "SiteNameValue": s.SiteName()})
+	s.render(w, r, http.StatusOK, "settings", map[string]any{"Title": "Settings", "SiteNameValue": s.SiteName(), "PublicRequests": s.PublicRequests()})
 }
 
 func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
@@ -19,12 +19,19 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		s.render(w, r, http.StatusUnprocessableEntity, "settings", map[string]any{
 			"Title": "Settings", "Errors": []string{"Site name is required."}, "SiteNameValue": name,
+			"PublicRequests": r.PostFormValue("public_requests") == "1",
 		})
 		return
 	}
-	if err := s.store.SetSetting("site_name", name); err != nil {
-		s.serverError(w, r, err)
-		return
+	public := ""
+	if r.PostFormValue("public_requests") == "1" {
+		public = "1"
+	}
+	for k, v := range map[string]string{"site_name": name, publicRequestsSetting: public} {
+		if err := s.store.SetSetting(k, v); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 	}
 	s.reloadSettings()
 	s.redirect(w, r, "/admin/settings", "Settings saved.")
