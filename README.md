@@ -5,12 +5,7 @@ every event, rehearsal, meeting and room booking on one calendar, with room
 conflicts caught across all the apps. People inside or outside the church
 can also ask for a room here.
 
-It works on its own, and joins up with the church's other apps when they're
-added: the [event planner](../event_planning) and the
-[production planner](../production_planning) push their dates and rooms
-here, the [maintenance tracker](../maintenance_tracking) supplies the rooms,
-and [User Management](../user_management) signs people in. See `PLAN.md`
-for the design and what's built so far.
+It works on its own. See `PLAN.md` for the design and what's built so far.
 
 Built the same way as the other apps:
 
@@ -18,6 +13,36 @@ Built the same way as the other apps:
 - **Database:** SQLite (one file, pure-Go driver, no CGO)
 - **Frontend:** server-rendered HTML + [Stimulus](https://stimulus.hotwired.dev), vendored, with the
   same no-build autoloader. No Node, no bundler. Installable as an app (PWA).
+
+## Works alone, or with the other church apps
+
+The calendar runs on its own, with its own users, rooms and bookings. You
+can use just this one app. Connecting another church app is optional and
+adds features. Until a connection is set up (on `/admin/connections` or
+with environment variables) it is off, and the calendar acts as if that
+app doesn't exist. Each app keeps its own data. Here, another app's things
+are kept as a thin copy or an ID plus a cached name.
+
+| Connected app | What it adds | What this calendar keeps |
+|---------------|--------------|--------------------------|
+| Nothing (alone) | Rooms and bookings made by hand, [room requests](#room-requests), the public calendar, `.ics` feeds, the [read API](#reading-the-calendar-from-elsewhere), local login | Its own users, rooms and bookings |
+| Maintenance tracker | **Import from tracker** for rooms. A hand-made room with the same name is taken over | The tracker's place ID and a cached name or path |
+| Event planner | Its events arrive by push, and **Make this an event** appears on hand-made bookings and approved requests. Its `/calendar` redirects here | A thin copy of each event: times, rooms, title, public description, visibility, link back. Never notes, tasks, helpers or needs |
+| Production planner | Its rehearsals and performances arrive by push | The same thin copy. Never cast, mics or readiness |
+| [User Management](#single-sign-on) | Sign in with a church account, and roles. Local login is the break-glass | A local user row linked to the User Management ID, so bookings stay |
+
+This calendar owns bookings, room requests, which rooms can be booked,
+the public calendar, the `.ics` feeds and the read API. Pushes from apps
+are never refused for conflicts: the calendar answers with a warning.
+
+Both sides of each connection are built. What is left is setting them up
+when the calendar is first deployed: tokens, registering the calendar in
+User Management, and each planner's **Send all** button to fill in what it
+already has (`PLAN.md`, steps 8 and 9).
+
+Setup is in [Connections](#connections),
+[Apps sending their events](#apps-sending-their-events) and
+[Single sign-on](#single-sign-on).
 
 ## Quick start
 
