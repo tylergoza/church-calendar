@@ -66,8 +66,8 @@ Each role includes the ones before it.
 | Can | Member | Scheduler | Admin |
 |-----|:------:|:---------:|:-----:|
 | See private bookings in full (not locked ones), book free rooms, change or cancel their own bookings | ✓ | ✓ | ✓ |
-| Make and edit hand-made bookings, answer visitors' requests, cancel any hand-made or request booking, manage rooms, see and resolve conflicts | | ✓ | ✓ |
-| Users, API tokens, connections, settings and backups | | | ✓ |
+| Make and edit hand-made bookings, answer visitors' requests, cancel any hand-made or request booking, see and resolve conflicts | | ✓ | ✓ |
+| Rooms (add, edit, import from the tracker), equipment, users, API tokens, connections, settings and backups | | | ✓ |
 
 Visitors (not signed in) see the public calendar.
 

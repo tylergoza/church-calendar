@@ -36,8 +36,8 @@ func scanUser(sc interface{ Scan(...any) error }) (User, error) {
 
 // The three roles. A member sees private bookings in full (not locked
 // ones) and can ask for rooms; a scheduler also makes and edits hand-made
-// bookings, answers room requests, manages rooms and resolves conflicts;
-// an admin also manages users, API tokens, connected apps and settings.
+// bookings, answers room requests and resolves conflicts; an admin also
+// manages rooms, equipment, users, API tokens, connected apps and settings.
 const (
 	RoleMember    = "member"
 	RoleScheduler = "scheduler"
@@ -69,7 +69,7 @@ func RoleFromSSO(role string) string { return NormalizeRole(strings.TrimSpace(ro
 // IsAdmin reports whether u is an administrator.
 func (u *User) IsAdmin() bool { return u != nil && u.Role == RoleAdmin }
 
-// CanSchedule reports whether u may manage bookings, rooms, requests and
+// CanSchedule reports whether u may manage bookings, requests and
 // conflicts (scheduler or admin).
 func (u *User) CanSchedule() bool {
 	return u != nil && (u.Role == RoleScheduler || u.Role == RoleAdmin)

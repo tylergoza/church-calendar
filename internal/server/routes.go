@@ -72,13 +72,6 @@ func (s *Server) routes() http.Handler {
 
 	// Schedulers
 	sched := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.requireScheduler(h)) }
-	sched("GET /rooms/new", s.handleRoomNew)
-	sched("GET /rooms/import", s.handleRoomImport)
-	sched("POST /rooms/import", s.handleRoomImportRun)
-	sched("POST /rooms/import/equipment", s.handleEquipmentSyncRun)
-	sched("POST /rooms", s.handleRoomCreate)
-	sched("GET /rooms/{id}/edit", s.handleRoomEdit)
-	sched("POST /rooms/{id}", s.handleRoomUpdate)
 	sched("GET /bookings/new", s.handleBookingNew)
 	sched("POST /bookings", s.handleBookingCreate)
 	sched("GET /bookings/{id}/edit", s.handleBookingEdit)
@@ -97,6 +90,13 @@ func (s *Server) routes() http.Handler {
 
 	// Admins
 	admin := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.requireAdmin(h)) }
+	admin("GET /rooms/new", s.handleRoomNew)
+	admin("GET /rooms/import", s.handleRoomImport)
+	admin("POST /rooms/import", s.handleRoomImportRun)
+	admin("POST /rooms/import/equipment", s.handleEquipmentSyncRun)
+	admin("POST /rooms", s.handleRoomCreate)
+	admin("GET /rooms/{id}/edit", s.handleRoomEdit)
+	admin("POST /rooms/{id}", s.handleRoomUpdate)
 	admin("GET /equipment", s.handleEquipment)
 	admin("GET /equipment/new", s.handleEquipmentNew)
 	admin("POST /equipment", s.handleEquipmentCreate)

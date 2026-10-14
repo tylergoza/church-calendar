@@ -32,12 +32,14 @@ func bookingForm(title, date string, rooms ...int64) url.Values {
 func TestRoomPages(t *testing.T) {
 	c, sam, st := schedulerClient(t)
 	st.CreateUser("mel", "", "a long password", store.RoleMember)
+	st.CreateUser("boss", "", "a long password", store.RoleAdmin)
+	boss := c.as("boss")
 
-	sam.post("/rooms/new", "/rooms", url.Values{"name": {"Lifecenter"}, "capacity": {"200"}, "bookable": {"1"}}, 200)
-	if body := sam.post("/rooms/new", "/rooms", url.Values{"name": {"lifecenter"}}, 422); !strings.Contains(body, "already called") {
+	boss.post("/rooms/new", "/rooms", url.Values{"name": {"Lifecenter"}, "capacity": {"200"}, "bookable": {"1"}}, 200)
+	if body := boss.post("/rooms/new", "/rooms", url.Values{"name": {"lifecenter"}}, 422); !strings.Contains(body, "already called") {
 		t.Error("expected a duplicate-name error")
 	}
-	if body := sam.post("/rooms/new", "/rooms", url.Values{"name": {"Kitchen"}, "capacity": {"lots"}}, 422); !strings.Contains(body, "number of people") {
+	if body := boss.post("/rooms/new", "/rooms", url.Values{"name": {"Kitchen"}, "capacity": {"lots"}}, 422); !strings.Contains(body, "number of people") {
 		t.Error("expected a capacity error")
 	}
 	rooms, _ := st.ListRooms(true)
@@ -45,12 +47,21 @@ func TestRoomPages(t *testing.T) {
 		t.Fatalf("rooms = %+v", rooms)
 	}
 	id := itoa(rooms[0].ID)
-	sam.post("/rooms/"+id+"/edit", "/rooms/"+id, url.Values{"name": {"Lifecenter"}, "archived": {"1"}}, 200)
-	if body := sam.get("/rooms", 200); strings.Contains(body, "Lifecenter") {
+	boss.post("/rooms/"+id+"/edit", "/rooms/"+id, url.Values{"name": {"Lifecenter"}, "archived": {"1"}}, 200)
+	if body := boss.get("/rooms", 200); strings.Contains(body, "Lifecenter") {
 		t.Error("archived room should be hidden from the list")
 	}
-	if body := sam.get("/rooms?archived=1", 200); !strings.Contains(body, "Lifecenter") {
+	if body := boss.get("/rooms?archived=1", 200); !strings.Contains(body, "Lifecenter") {
 		t.Error("archived room should show when asked")
+	}
+
+	// Schedulers book rooms but don't add, edit or import them.
+	sam.get("/rooms/"+id, 200)
+	sam.get("/rooms/new", 403)
+	sam.get("/rooms/"+id+"/edit", 403)
+	sam.get("/rooms/import", 403)
+	if body := sam.get("/rooms", 200); strings.Contains(body, `href="/rooms/new"`) || strings.Contains(body, "/edit") {
+		t.Error("schedulers shouldn't see add or edit room links")
 	}
 
 	mel := c.as("mel")

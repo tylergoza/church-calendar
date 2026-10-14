@@ -57,7 +57,7 @@ func TestRoomImport(t *testing.T) {
 	tr := fakeTrackerApp(t, &places)
 	env := map[string]string{"TRACKER_URL": tr.URL, "TRACKER_TOKEN": "mt_good1234"}
 	c, st := newTestServerWith(t, Config{Env: func(k string) string { return env[k] }})
-	st.CreateUser("sam", "", "a long password", store.RoleScheduler)
+	st.CreateUser("sam", "", "a long password", store.RoleAdmin)
 	st.CreateUser("mel", "", "a long password", store.RoleMember)
 	sched := c.as("sam")
 	c.as("mel").get("/rooms/import", 403)
@@ -99,7 +99,7 @@ func TestRoomImport(t *testing.T) {
 
 func TestRoomImportOff(t *testing.T) {
 	c, st := newTestServer(t)
-	st.CreateUser("sam", "", "a long password", store.RoleScheduler)
+	st.CreateUser("sam", "", "a long password", store.RoleAdmin)
 	sched := c.as("sam")
 	if strings.Contains(sched.get("/rooms", 200), "/rooms/import") {
 		t.Error("no import button without the tracker")
