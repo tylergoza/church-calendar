@@ -54,3 +54,4 @@ Ansible, calendar views) from `../event_planning`, the newest sibling.
   them per whole connection. Secrets encrypted with `secrets.key`.
 - `BOOKING_PLAN.md`: this app's part of bookable rooms / pending bookings / unscheduled events (design in `../.claude/plans/bookable-rooms-and-pending-bookings.md`). Tick its checkboxes as steps are done.
 - `EQUIPMENT_PLAN.md`: this app's part of equipment and services (Sound, Lighting) asked for with room bookings (design in `../.claude/plans/bookable-equipment.md`). Tick its checkboxes as steps are done.
+- `SIGNUPS_PLAN.md`: sign-up links pushed by the event planner (design in `../.claude/plans/event-signups.md`). The calendar keeps only label, URL, state and close time, under the booking's visibility; never forms, counts or answers. Tick its checkboxes as steps are done.
