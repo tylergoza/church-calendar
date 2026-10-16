@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tylergoza/church-calendar/internal/store"
 )
@@ -104,6 +105,9 @@ type apiSourceBookingJSON struct {
 	Status      string   `json:"status"`
 	UpdatedAt   string   `json:"updated_at"` // RFC 3339, UTC
 	CalendarURL string   `json:"calendar_url"`
+	// Signup is the sign-up link as stored (no key when there's none, or
+	// it was dropped), so the app can tell it arrived.
+	Signup *apiSignupJSON `json:"signup,omitempty"`
 }
 
 func (s *Server) sourceBookingJSON(r *http.Request, b store.Booking) apiSourceBookingJSON {
@@ -114,7 +118,7 @@ func (s *Server) sourceBookingJSON(r *http.Request, b store.Booking) apiSourceBo
 	return apiSourceBookingJSON{ID: b.ID, SourceID: b.SourceID, Title: b.Title, Kind: b.Kind, StartsOn: b.StartsOn,
 		StartTime: b.StartTime, EndsOn: b.EndsOn, EndTime: b.EndTime, Rooms: roomNames(b.Rooms), Visibility: b.Visibility,
 		Description: b.Description, URL: b.URL, Status: b.Status, UpdatedAt: updated,
-		CalendarURL: s.baseURL(r) + bookingURL(b.ID)}
+		CalendarURL: s.baseURL(r) + bookingURL(b.ID), Signup: signupJSON(b.Signup, b.Signup.State)}
 }
 
 // PUT --------------------------------------------------------------------------
@@ -137,6 +141,7 @@ type pushBody struct {
 	URL         string         `json:"url"`
 	Status      string         `json:"status"`
 	Replaces    int64          `json:"replaces"`
+	Signup      *apiSignupJSON `json:"signup"` // none or null clears it
 }
 
 // pushError is a 400 with a message per field.
@@ -241,6 +246,7 @@ func (s *Server) apiPutBooking(w http.ResponseWriter, r *http.Request, tok *stor
 		return
 	}
 	b.Source, b.SourceID = tok.Source, r.PathValue("source_id")
+	b.Signup = readSignup(p.Signup, s.EventsURL())
 	res, err := s.store.PutSourceBooking(b, rooms, p.Replaces)
 	if err != nil {
 		s.apiServerError(w, r, err)
@@ -273,6 +279,48 @@ func (s *Server) apiPutBooking(w http.ResponseWriter, r *http.Request, tok *stor
 		out["replaced"] = res.Replaced
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// readSignup tidies a pushed sign-up link. Anything unusable drops the
+// link (never the push): a state other than open, full or closed, or an
+// address that isn't https (http only for a planner on http or this
+// machine) or, when the event planner is connected, not on its host. A
+// close time that can't be read is dropped on its own.
+func readSignup(p *apiSignupJSON, plannerURL string) store.Signup {
+	if p == nil {
+		return store.Signup{}
+	}
+	sg := store.Signup{Label: strings.TrimSpace(p.Label), URL: strings.TrimSpace(p.URL), State: strings.TrimSpace(p.State),
+		ClosesAt: strings.TrimSpace(p.ClosesAt)}
+	if !slices.Contains(store.SignupStates, sg.State) || !signupURLOK(sg.URL, plannerURL) {
+		return store.Signup{}
+	}
+	if sg.Label == "" || utf8.RuneCountInString(sg.Label) > 200 {
+		sg.Label = "Sign up"
+	}
+	if _, err := time.Parse(store.SignupClosesLayout, sg.ClosesAt); err != nil {
+		sg.ClosesAt = ""
+	}
+	return sg
+}
+
+func signupURLOK(raw, plannerURL string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || len(raw) > 2000 || u.User != nil {
+		return false
+	}
+	if plannerURL != "" {
+		pu, err := url.Parse(plannerURL)
+		if err != nil || !strings.EqualFold(u.Host, pu.Host) {
+			return false
+		}
+		return u.Scheme == "https" || (u.Scheme == "http" && pu.Scheme == "http")
+	}
+	switch u.Hostname() {
+	case "localhost", "127.0.0.1", "::1":
+		return u.Scheme == "https" || u.Scheme == "http"
+	}
+	return u.Scheme == "https"
 }
 
 // apiDeleteBooking answers 204 even when the booking was already gone.

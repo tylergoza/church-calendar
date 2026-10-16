@@ -302,6 +302,7 @@ func (s *Server) funcs() template.FuncMap {
 		"relDays":            s.relDays,
 		"fmtDate":            fmtDate,
 		"fmtTime":            fmtTime,
+		"fmtSignupClose":     fmtSignupClose,
 		"today":              func() string { return s.today() },
 		"dict":               dict,
 		"roleLabel":          store.RoleLabel,
@@ -510,6 +511,15 @@ func fmtDate(date string) string {
 		return date
 	}
 	return d.Format("Jan 2, 2006")
+}
+
+// fmtSignupClose renders a sign-up's close time, "Nov 1, 2026, 11:59 pm".
+func fmtSignupClose(at string) string {
+	t, err := time.Parse(store.SignupClosesLayout, at)
+	if err != nil {
+		return at
+	}
+	return t.Format("Jan 2, 2006") + ", " + strings.ToLower(t.Format("3:04 pm"))
 }
 
 // fmtTime renders a SQLite UTC timestamp ("YYYY-MM-DD HH:MM:SS") in local time.

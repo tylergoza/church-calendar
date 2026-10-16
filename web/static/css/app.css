@@ -536,7 +536,8 @@ select:disabled { opacity: .6; }
 .cal-item { margin: 0 0 6px; font-size: .85rem; line-height: 1.3; overflow-wrap: anywhere; }
 .cal-item__when { display: block; color: var(--muted); font-size: .8rem; }
 .cal-item__title { font-weight: 600; }
-.cal-item__kind, .cal-item__rooms, .cal-item__inside { display: block; }
+.cal-item__kind, .cal-item__rooms, .cal-item__inside, .cal-item__signup { display: block; }
+.cal-item__signup { color: var(--primary); font-weight: 600; }
 .cal-item--busy { color: var(--muted); font-style: italic; padding-left: 6px; border-left: 3px solid var(--border); }
 .cal-agenda__day { margin-bottom: 18px; }
 .cal-agenda__day h2 { font-size: 1.05rem; margin: 0 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
@@ -614,3 +615,6 @@ select:disabled { opacity: .6; }
 .equip-short { color: var(--overdue); font-weight: 600; }
 .equip-where { display: inline; }
 .setup-day { margin-bottom: 20px; }
+
+/* Sign-up link on a booking */
+.signup { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

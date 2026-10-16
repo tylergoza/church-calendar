@@ -74,8 +74,39 @@ type Booking struct {
 	UpdatedAt      string
 	CancelNote     string // to the person, when a scheduler cancelled it
 	CancelledBy    int64
+	Signup         Signup // only on app bookings; the zero value is none
 	Rooms          []BookingRoom
 }
+
+// Signup is a sign-up link an app sent with its booking. The calendar never
+// holds the form, counts or answers, only where to go and whether it's open.
+type Signup struct {
+	Label    string
+	URL      string // "" = no sign-up
+	State    string // open, full or closed
+	ClosesAt string // local time, "2026-11-01T23:59"; "" for none
+}
+
+// SignupStates are the states an app may send.
+var SignupStates = []string{"open", "full", "closed"}
+
+// SignupClosesLayout is how ClosesAt is written.
+const SignupClosesLayout = "2006-01-02T15:04"
+
+// StateAt is the state as of now: a close time already passed reads as
+// closed even before the app says so. "" when there is no sign-up.
+func (s Signup) StateAt(now time.Time) string {
+	if s.URL == "" {
+		return ""
+	}
+	if s.ClosesAt != "" && now.Format(SignupClosesLayout) >= s.ClosesAt {
+		return "closed"
+	}
+	return s.State
+}
+
+// Current is StateAt the server's time now.
+func (s Signup) Current() string { return s.StateAt(time.Now()) }
 
 // NotYet reports whether the booking is pending or pencilled in: it blocks
 // its rooms, but isn't certain yet.
@@ -167,13 +198,13 @@ func (b Booking) ShortWhen() string {
 
 const bookingCols = `id, source, COALESCE(source_id, ''), COALESCE(series_id, 0), occurrence_date, title, kind,
 	starts_on, start_time, ends_on, end_time, visibility, description, url, status, COALESCE(created_by, 0), created_at, updated_at,
-	cancel_note, COALESCE(cancelled_by, 0)`
+	cancel_note, COALESCE(cancelled_by, 0), signup_label, signup_url, signup_state, signup_closes_at`
 
 func scanBooking(sc interface{ Scan(...any) error }) (Booking, error) {
 	var b Booking
 	err := sc.Scan(&b.ID, &b.Source, &b.SourceID, &b.SeriesID, &b.OccurrenceDate, &b.Title, &b.Kind,
 		&b.StartsOn, &b.StartTime, &b.EndsOn, &b.EndTime, &b.Visibility, &b.Description, &b.URL, &b.Status, &b.CreatedBy, &b.CreatedAt, &b.UpdatedAt,
-		&b.CancelNote, &b.CancelledBy)
+		&b.CancelNote, &b.CancelledBy, &b.Signup.Label, &b.Signup.URL, &b.Signup.State, &b.Signup.ClosesAt)
 	return b, err
 }
 

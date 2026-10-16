@@ -10,6 +10,7 @@
       {{if eq .I.Status "pending"}}<span class="badge badge--warn">Pending</span>{{else if eq .I.Status "tentative"}}<span class="badge badge--warn">Pencilled in</span>{{end}}
       {{if .I.Kind}}<span class="cal-item__kind muted">{{.I.Kind}}</span>{{end}}
       {{with .I.RoomNames}}<span class="cal-item__rooms muted">{{.}}</span>{{end}}
+      {{if eq .I.Signup.Current "open"}}<span class="cal-item__signup small">Sign-ups open</span>{{end}}
       {{if and .User .I.URL}}<a class="cal-item__inside small" href="{{.I.URL}}">Open in the {{source .I.Source}}</a>{{end}}
     </div>
   {{end}}

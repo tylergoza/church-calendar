@@ -141,6 +141,11 @@ People can ask for equipment (tables, chairs, the inflatables) and help
   private bookings in full. Locked bookings are only ever busy. Bookings
   seen in full carry `equipment: [{name, tracker_product_id, quantity,
   note, short}]` (the tracker reads it for set-ups).
+- `signup` is optional: `{label, url, state, closes_at}` from the event
+  planner, under the same visibility as the description. The website shows
+  a button to `url` (with `label`) when `state` is `open`, and "Full" or
+  "Sign-ups closed" otherwise. A `closes_at` already passed reads as
+  `closed`. The `.ics` adds "Sign up: …" to the description while open.
 - `/calendar/by-source/{source}/{id}` sends the apps' old calendar links to
   the booking they pushed.
 
@@ -167,7 +172,12 @@ With an app token (`Authorization: Bearer cal_…`), under `/api/v1`:
 A token only touches its own app's bookings (403 otherwise). Rooms are
 matched by the tracker's place ID, then by name; unknown places are kept
 by name but not checked for clashes, and never become rooms. Locked
-bookings are stored with no title or description even if one is sent.
+bookings are stored with no title, description or sign-up even if one is sent.
+An optional `signup: {label, url, state, closes_at}` (`state` open, full or
+closed) puts a **Sign up** button on the booking; none or `null` clears it.
+One that can't be used (a state it doesn't know, an address that isn't
+https, or not on the event planner's address when that's connected) is
+dropped, never refused.
 `replaces` (from **Make this an event**, shown on hand-made bookings and
 approved requests when the event planner is connected) swaps a hand-made
 booking for the event's in one go. Other bookings show to an app as busy

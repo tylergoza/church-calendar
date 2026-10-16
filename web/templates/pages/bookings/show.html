@@ -23,7 +23,12 @@
     {{if .CanSee}}{{with .Repeats}}<div><dt>Repeats</dt><dd>{{.}}</dd></div>{{end}}{{end}}
     {{if and .User .CanSee}}<div><dt>From</dt><dd>{{if $b.URL}}<a href="{{$b.URL}}">{{.Source}}</a>{{else if .RequestID}}<a href="/requests/{{.RequestID}}">{{.Source}}</a>{{else}}{{.Source}}{{end}}</dd></div>{{end}}
   </dl>
-  {{if .CanSee}}{{with $b.Description}}<p>{{range lines .}}{{.}}<br>{{end}}</p>{{end}}{{end}}
+  {{if .CanSee}}{{with $b.Description}}<p>{{range lines .}}{{.}}<br>{{end}}</p>{{end}}
+    {{with $b.Signup.Current}}<p class="signup">
+      {{if eq . "open"}}<a class="btn btn--primary" href="{{$b.Signup.URL}}">{{$b.Signup.Label}}</a>{{if $b.Signup.ClosesAt}} <span class="muted small">Closes {{fmtSignupClose $b.Signup.ClosesAt}}</span>{{end}}
+      {{else if eq . "full"}}<span class="badge">Full</span>
+      {{else}}<span class="badge">Sign-ups closed</span>{{end}}
+    </p>{{end}}{{end}}
   {{if and .User .CanSee (not $b.HandMade)}}<p class="hint">This booking comes from the {{.Source}}, so it's changed there.</p>{{end}}
 </div>
 {{template "equipment-card" (dict "V" .Equip "B" $b "CSRF" .CSRF)}}

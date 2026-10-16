@@ -256,9 +256,14 @@ token. A source token can only touch bookings with its own `source`.
   "description": "Potluck dinner for everyone.",
   "url": "https://events.example.org/events/12",
   "status": "confirmed",
-  "replaces": 305
+  "replaces": 305,
+  "signup": {"label": "Sign up for the cook-off", "url": "https://events.example.org/signup/k3J9xQ",
+             "state": "open", "closes_at": "2026-11-01T23:59"}
 }
 ```
+
+- **`signup`** is optional (`SIGNUPS_PLAN.md`); none or `null` clears it,
+  and one that can't be used is dropped, not refused.
 
 - **Rooms are matched** by `place_id` to `rooms.tracker_place_id`, then by
   name (case-insensitive). No match: stored by name only, shown, but not
