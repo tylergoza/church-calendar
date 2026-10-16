@@ -142,6 +142,26 @@ type apiEventJSON struct {
 	// Equipment is what the booking asks for (the tracker reads it for
 	// set-ups). Omitted when busy or asking for nothing.
 	Equipment []apiEquipmentJSON `json:"equipment,omitempty"`
+	// Signup is the event planner's sign-up link. Omitted when busy or
+	// there's none; the website shows a button to url when state is open.
+	Signup *apiSignupJSON `json:"signup,omitempty"`
+}
+
+// apiSignupJSON is a sign-up link, as pushed and as read. state is open,
+// full or closed; closes_at is local time like "2026-11-01T23:59", or "".
+type apiSignupJSON struct {
+	Label    string `json:"label"`
+	URL      string `json:"url"`
+	State    string `json:"state"`
+	ClosesAt string `json:"closes_at"`
+}
+
+// signupJSON is sg with state shown as given, or nil when there's none.
+func signupJSON(sg store.Signup, state string) *apiSignupJSON {
+	if sg.URL == "" {
+		return nil
+	}
+	return &apiSignupJSON{Label: sg.Label, URL: sg.URL, State: state, ClosesAt: sg.ClosesAt}
 }
 
 // apiEquipmentJSON is one thing a booking asks for. Short is how many more
@@ -191,6 +211,7 @@ func (s *Server) apiEventJSON(r *http.Request, e store.CalendarEntry) apiEventJS
 		j.ID, j.Source, j.Title, j.Kind, j.Status = e.ID, e.Source, e.Title, e.Kind, e.Status
 		j.Description, j.Public = e.Description, e.Visibility == "public"
 		j.URL = s.baseURL(r) + bookingURL(e.ID)
+		j.Signup = signupJSON(e.Signup, e.Signup.Current())
 	}
 	return j
 }
@@ -357,8 +378,12 @@ func buildICS(calName, host, baseURL string, list []store.CalendarEntry, now tim
 			if names := e.RoomNames(); names != "" {
 				line("LOCATION:" + escapeICS(names))
 			}
-			if e.Description != "" {
-				line("DESCRIPTION:" + escapeICS(e.Description))
+			desc := e.Description
+			if e.Signup.StateAt(now) == "open" {
+				desc = strings.TrimSpace(desc + "\n\nSign up: " + e.Signup.URL)
+			}
+			if desc != "" {
+				line("DESCRIPTION:" + escapeICS(desc))
 			}
 			line("URL:" + baseURL + bookingURL(e.ID))
 		}

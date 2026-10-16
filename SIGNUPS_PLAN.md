@@ -6,7 +6,7 @@ The calendar keeps only a link and a state on the booking, shows a
 **Sign up** button, and passes the link on in its read API, so the church
 website gets it from here.
 
-Status: planned (2026-10-14), nothing built yet.
+Status: steps 1 and 2 built (2026-10-15), migration `004_signup_links.sql`.
 
 ## What arrives
 
@@ -60,10 +60,10 @@ ALTER TABLE bookings ADD COLUMN signup_closes_at TEXT NOT NULL DEFAULT '';
 ## Steps
 
 ### 1. Store and show the link
-- [ ] Migration `0NN_signup_links.sql`, the next free number; push decodes `signup`, checks the URL, drops it for locked and non-app bookings
-- [ ] Button on `/calendar/{id}`, mark in month/agenda views, `closes_at` in the past reads as closed
-- [ ] Read API and `.ics` field, with visibility
-- [ ] Tests: push with and without `signup` (cleared), locked drops it, private hidden from visitors and tokens without private access, wrong-host URL dropped, past `closes_at` shows closed
+- [x] Migration `0NN_signup_links.sql`, the next free number; push decodes `signup`, checks the URL, drops it for locked and non-app bookings
+- [x] Button on `/calendar/{id}`, mark in month/agenda views, `closes_at` in the past reads as closed
+- [x] Read API and `.ics` field, with visibility
+- [x] Tests: push with and without `signup` (cleared), locked drops it, private hidden from visitors and tokens without private access, wrong-host URL dropped, past `closes_at` shows closed
 
 ### 2. Website
-- [ ] Note in `README.md`'s read API section: `signup` is optional; show a button to `url` when `state` is `open`
+- [x] Note in `README.md`'s read API section: `signup` is optional; show a button to `url` when `state` is `open`

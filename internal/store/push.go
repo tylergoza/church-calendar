@@ -40,8 +40,8 @@ type PushResult struct {
 // to the calendar's by place ID, then by name (any case); a match is
 // stored under the calendar's name for the room, anything else by the name
 // sent, with no room ID (shown, not checked for conflicts). Rooms are
-// never created. Locked bookings are stored with no title, kind or
-// description, whatever was sent.
+// never created. Locked bookings are stored with no title, kind,
+// description or sign-up, whatever was sent.
 //
 // replaces is a hand-made booking (source calendar or request) this one
 // takes over: it's deleted in the same transaction and its request, if
@@ -52,7 +52,12 @@ func (s *Store) PutSourceBooking(b Booking, rooms []PushRoom, replaces int64) (P
 	b.Visibility = NormalizeVisibility(b.Visibility)
 	if b.Visibility == "locked" {
 		b.Title, b.Kind, b.Description = "", "", ""
+		b.Signup = Signup{}
 	}
+	if b.Signup.URL == "" {
+		b.Signup = Signup{}
+	}
+	sg := b.Signup
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return res, err
@@ -62,9 +67,10 @@ func (s *Store) PutSourceBooking(b Booking, rooms []PushRoom, replaces int64) (P
 	switch {
 	case err == sql.ErrNoRows:
 		r, err := tx.Exec(`INSERT INTO bookings (source, source_id, title, kind, starts_on, start_time, ends_on, end_time,
-			visibility, description, url, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			visibility, description, url, status, signup_label, signup_url, signup_state, signup_closes_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			b.Source, b.SourceID, b.Title, b.Kind, b.StartsOn, b.StartTime, b.EndsOn, b.EndTime,
-			b.Visibility, b.Description, b.URL, b.Status)
+			b.Visibility, b.Description, b.URL, b.Status, sg.Label, sg.URL, sg.State, sg.ClosesAt)
 		if err != nil {
 			return res, err
 		}
@@ -76,8 +82,10 @@ func (s *Store) PutSourceBooking(b Booking, rooms []PushRoom, replaces int64) (P
 		return res, err
 	default:
 		if _, err := tx.Exec(`UPDATE bookings SET title = ?, kind = ?, starts_on = ?, start_time = ?, ends_on = ?, end_time = ?,
-			visibility = ?, description = ?, url = ?, status = ?, updated_at = datetime('now') WHERE id = ?`,
-			b.Title, b.Kind, b.StartsOn, b.StartTime, b.EndsOn, b.EndTime, b.Visibility, b.Description, b.URL, b.Status, res.ID); err != nil {
+			visibility = ?, description = ?, url = ?, status = ?, signup_label = ?, signup_url = ?, signup_state = ?,
+			signup_closes_at = ?, updated_at = datetime('now') WHERE id = ?`,
+			b.Title, b.Kind, b.StartsOn, b.StartTime, b.EndsOn, b.EndTime, b.Visibility, b.Description, b.URL, b.Status,
+			sg.Label, sg.URL, sg.State, sg.ClosesAt, res.ID); err != nil {
 			return res, err
 		}
 	}
