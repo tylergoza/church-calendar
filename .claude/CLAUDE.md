@@ -46,8 +46,6 @@ Ansible, calendar views) from `../event_planning`, the newest sibling.
 - Secrets never go in files or `export` lines in docs; the user keeps them
   in the macOS Keychain and runs make through `~/.zshrc` helpers.
 - CSP is `style-src 'self'`: no inline `style=` attributes in templates.
-- Deploys onto the maintenance tracker's droplet as `calendar.<dns_zone>`;
-  the main Caddyfile text must stay identical in every repo's deploy.yml.
 - The user runs all `git commit`s themselves (YubiKey signing). Don't commit.
 - Connections (design in `../event_planning/CONNECTIONS_PLAN.md`): links to
   other apps are admin settings on `/admin/connections`; env vars override
@@ -55,3 +53,5 @@ Ansible, calendar views) from `../event_planning`, the newest sibling.
 - `BOOKING_PLAN.md`: this app's part of bookable rooms / pending bookings / unscheduled events (design in `../.claude/plans/bookable-rooms-and-pending-bookings.md`). Tick its checkboxes as steps are done.
 - `EQUIPMENT_PLAN.md`: this app's part of equipment and services (Sound, Lighting) asked for with room bookings (design in `../.claude/plans/bookable-equipment.md`). Tick its checkboxes as steps are done.
 - `SIGNUPS_PLAN.md`: sign-up links pushed by the event planner (design in `../.claude/plans/event-signups.md`). The calendar keeps only label, URL, state and close time, under the booking's visibility; never forms, counts or answers. Tick its checkboxes as steps are done.
+- `MEMBERS_PLAN.md`: this app's part of the website members area (design in `../.claude/plans/members-site.md`): `/api/v1/me/…` for members with User Management tokens, and the public `/calendar.json`. This app is the pilot. Tick its checkboxes as steps are done.
+- Deploy (`deploy/ansible`): the app runs on an apps box (`apps_box`, default `apps-1`, shared with the other apps) in the church DigitalOcean account as `calendar.<dns_zone>` and binds its VPC address (port 8120); the edge box (`../edge_proxy`) holds Caddy, DNS points at it, and this deploy writes the app's site file there. Run commands through `with-do-church` (plus `with-um`). Its state is `calendar.db` plus `secrets.key` only; `make backup` / `restore` / `move` carry both. Real `do_team` and domains live in the gitignored `vars.yml`.
