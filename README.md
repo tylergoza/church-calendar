@@ -322,8 +322,8 @@ The first user created is always an admin.
 
 Before turning SSO on, register this app from the `user_management` repo.
 Secrets live in the macOS Keychain and reach `make` through the `with-*`
-helpers in `~/.zshrc`: `with-do` (DigitalOcean token, service
-`digitalocean`), `with-um` (the User Management client secrets) and
+helpers in `~/.zshrc`: `with-do-church` (DigitalOcean token, service
+`digitalocean-church`), `with-um` (the User Management client secrets) and
 `with-cal` (this app's tracker token, service `church-calendar`).
 
 `with-um` needs one more line for this app: `UM_CALENDAR_SECRET`, read from
@@ -338,9 +338,9 @@ with-cal() {
 
 ```sh
 # in ../user_management
-with-do make register-app APP=calendar                             # dry run: shows what would change
-with-do make register-app APP=calendar DRY_RUN=false               # registers; saves the secret in the Keychain as um-calendar
-with-do make register-app APP=calendar DRY_RUN=false ROTATE=true   # lost or leaked secret: a new one, saved over the old
+with-do-church make register-app APP=calendar                             # dry run: shows what would change
+with-do-church make register-app APP=calendar DRY_RUN=false               # registers; saves the secret in the Keychain as um-calendar
+with-do-church make register-app APP=calendar DRY_RUN=false ROTATE=true   # lost or leaked secret: a new one, saved over the old
 ```
 
 The SSO client ID is `calendar`. A new secret stops the old one working at
@@ -348,38 +348,46 @@ once, so deploy here straight after rotating.
 
 ## Deploying
 
-The app is one binary plus one `.db` file, behind [Caddy](https://caddyserver.com)
-for HTTPS. `deploy/` has the systemd unit (`deploy/church-calendar.service`)
-and a Caddyfile (`deploy/Caddyfile`) for doing it by hand.
+The app is one binary plus one `.db` file. Production has a separate edge
+box running [Caddy](https://caddyserver.com) for HTTPS. `deploy/` has the
+systemd unit (`deploy/church-calendar.service`) and a Caddyfile
+(`deploy/Caddyfile`) for doing it by hand.
 
 ### DigitalOcean with Ansible
 
-`deploy/ansible/` works like the other apps', and by default puts the
-calendar **on the maintenance tracker's droplet**. It finds the droplet by
-the tracker's tag (`maintenance-tracker`) and adds itself alongside, on port
-8120, with its own service user (`calendar`), data folder
-(`/var/lib/church-calendar`) and Caddy site, at `calendar.<dns_zone>`.
-Provision adds the DNS record (pointing at the same droplet) and the service
-user; with no tagged droplet it would create one. Deploy runs the tests,
+`deploy/ansible/` works like the other apps': it puts the calendar on the
+shared apps box (`apps_box`, default `apps-1`), behind the edge box that runs
+Caddy for every app ([edge_proxy](../edge_proxy)). Nothing private is
+committed: the API token comes from the environment, droplets are found by tag
+on every run, and your domain and settings go in the gitignored
+`deploy/ansible/vars.yml`. Provision the edge box first (edge_proxy's
+`make provision`, which also makes the firewalls).
+
+Set `do_team` in `vars.yml` to the account's team name and every play stops if
+the token belongs to another account. `with-do-church` runs a command with
+`DIGITALOCEAN_TOKEN` set for the church account.
+
+Provision finds the apps box by tag (or creates it, tagged `apps` and
+`apps-1` plus `do_extra_tags`, which should include `ssh` for the ssh
+firewall), adds a swap file and monitoring alerts, points
+`calendar.<dns_zone>` at the edge box (never at the apps box; an existing
+record already on an edge box is left alone, and `manage_dns: false` skips it)
+and adds the service user (`calendar`) and data folder
+(`/var/lib/church-calendar`) alongside the other apps. Deploy runs the tests,
 builds the Linux binary here, backs up the database when the binary changes
 (keeping 10 sets: the database and `secrets.key` together, as
 `pre-deploy-<time>.db` and `.key` in `/var/lib/church-calendar/backups`),
-installs, and checks `/healthz`.
-
-Caddy's config is split so the apps can deploy without overwriting each
-other: `/etc/caddy/Caddyfile` only imports `/etc/caddy/sites/*.caddy`, and
-each app writes its own site there (`church-calendar.caddy` here). If the
-droplet still has the Caddyfile from an older tracker deploy, the calendar's
-deploy stops and asks you to deploy the updated tracker first, rather than
-taking the tracker offline.
-
-For a droplet of its own instead, set `droplet_name` and `do_tag` to
-`church-calendar` in `vars.yml`.
+installs, and checks `/healthz` on the box's VPC address. The unit listens
+there on port 8120 (`app_port`; a drop-in sets `ADDR`), not on a public port.
+A second play writes the app's Caddy site,
+`/etc/caddy/sites/church-calendar.caddy`, on every edge box, then validates the
+whole config and reloads Caddy. The deploy stops before building if there's
+no edge box.
 
 ```sh
 cp deploy/ansible/vars.example.yml deploy/ansible/vars.yml   # set app_domain, dns_zone, sso_url, base_url
-with-do with-um make provision         # first time (ends with a deploy, so it needs with-um too)
-with-do with-um make deploy            # every update after that
+with-do-church make provision  # first time
+with-do-church make deploy     # every update after that
 ```
 
 On the first deploy the admin user is created before the app starts, so
@@ -396,7 +404,7 @@ planner's address (no token).
 
 First deploy with connections in `vars.yml`:
 
-1. `with-do with-um with-cal make deploy`.
+1. `with-do-church with-um with-cal make deploy`.
 2. Sign in, open **/admin/connections**, and press **Keep in settings** for each connection set in `vars.yml`. The app saves it (tokens are encrypted with `secrets.key`).
 3. Blank those values in `vars.yml` and redeploy. The app keeps its saved settings.
 
@@ -418,11 +426,11 @@ SSO is the expected setup, since User Management is already live. Set
 # in deploy/ansible/vars.yml:
 #   sso_url: https://accounts.example.org
 #   base_url: https://calendar.example.org   # sign-in returns to base_url/auth/callback
-with-do with-um make deploy
+with-do-church with-um make deploy
 ```
 
-`sso_internal_url` defaults to `http://127.0.0.1:8100` (User Management on
-the same droplet). The deploy stops before building if `sso_url` is set
+`sso_internal_url` is empty by default, so the app reaches User Management
+at its public address, through the edge box. The deploy stops before building if `sso_url` is set
 without the secret or `base_url`, so deploy through `with-um` every time
 while SSO is on. The secret goes only into the root-only systemd drop-in,
 with nothing logged. To turn SSO back off, remove `sso_url` and deploy
@@ -434,12 +442,54 @@ README (`ssh_private_key_file` in `vars.yml`; the same key works for all the app
 
 ### Moving between hosts
 
-**Settings → Download backup** (or the `backup` command) writes a consistent
-copy of the database while the app runs. Stop the app on the new host, put the
-file at its database path (`/var/lib/church-calendar/calendar.db`, owned by
-`calendar`), and start it. Saved tokens are encrypted with `secrets.key`, kept
-next to the database: copy it along too, or enter those tokens again after the
-move. Droplet backups cover all the apps on a shared droplet.
+Backup and restore are separate steps that go through this machine, so they
+work between DigitalOcean accounts and need no network path between the boxes.
+Backups land in `~/Backups/mountainview/church-calendar/<UTC time>/`
+(`local_backup_dir`; folders 0700, files 0600, outside every repo), holding
+`calendar.db`, `secrets.key` and a `manifest.yml` with the source, time,
+binary checksum and each file's sha256. The database and `secrets.key` are all
+the app stores; there are no uploads or other files to carry.
+
+```sh
+# Copy from a box. FROM is an IP (needs only SSH, no token) or a droplet name
+# (looked up in the token's account). The app keeps running.
+make backup FROM=203.0.113.10
+# The final copy: stops the app first and leaves it stopped and disabled.
+make backup FROM=203.0.113.10 STOP=true
+
+# Put a backup on the apps box. Provision first, without starting the app.
+with-do-church make provision RESTORE_PENDING=true
+with-do-church make restore BACKUP=latest      # or BACKUP=<dir>
+```
+
+`RESTORE_PENDING=true` installs the binary and unit but doesn't start the
+app or create an admin, because restore refuses to replace a database and the
+app would make an empty one on first start. Restore checks the manifest's
+checksums, installs the files owned by the service user at mode 0600, removes
+stale `-wal`/`-shm` files, starts the app and waits for `/healthz`. If the box
+already has a database it refuses, unless `FORCE=true`, which first saves
+`pre-restore-<time>.db` (and `.key`) in the box's backups folder.
+
+To move to another apps box in the same account, set `apps_box` in `vars.yml`
+to the new box and run `with-do-church make move FROM=apps-1`. It backs
+up the old box and stops the app there, provisions the new one with
+`RESTORE_PENDING=true`, restores, and rewrites the edge site file for the new
+address. DNS isn't touched. `move` refuses when `FROM` is the current
+`apps_box`; pass `FORCE=true` to replace a database already on the new box.
+The old box keeps its data folder as a fallback, and moving back is the same
+command the other way.
+
+By hand, without Ansible: **Settings → Download backup** (or the `backup`
+command) writes a consistent copy of the database while the app runs. Stop
+the app on the new host, put the file at its database path
+(`/var/lib/church-calendar/calendar.db`, owned by `calendar`, mode 0600), and
+start it. Saved tokens are encrypted with `secrets.key`, kept next to the
+database: copy it along too, or enter those tokens again after the move.
+
+**Changing domain.** List the old and new host names as `address_rewrites` in
+`vars.yml`, and each `make restore` swaps them in the database before the app
+starts. It's all or nothing: a failure leaves the database as it was and stops the
+restore. Names not listed are left alone.
 
 ## License
 
