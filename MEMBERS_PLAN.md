@@ -8,7 +8,16 @@ copied by the directory and the event planner, so keep it small and clean.
 Everything still works with the calendar alone: with User Management not
 connected, the `/me` API is off and nothing else changes.
 
-Status: planned 2026-10-16, not built.
+Status: planned 2026-10-16. **Read endpoints built 2026-11-14 for the MCP
+server** (`../mcp_server/APP_CONTRACTS.md`, branch `mcp-me-api`): the token
+gate is `internal/server/me_auth.go` + `internal/umtoken` (written to be
+copied into the other apps), the endpoints are `internal/server/api_me.go`.
+Differences from this plan, decided for the MCP pilot: the `/me` API is on
+whenever single sign-on is connected (no website origin needed yet, and no
+CORS headers at all until the website origin field exists); `via` may be
+`mcp` or `website`; `/me/availability` takes `from`, `to`, `rooms` (room
+names) as the contract says. Website-only parts (CORS, origin setting,
+writes, idempotency) are still to do.
 
 Next free migration is `005_…` (001 is frozen; 002 to 004 exist). Anything
 stored goes in `005_member_api.sql`, never in an old file.
@@ -51,25 +60,25 @@ Both are fields on the existing `sso` connection def in `handlers_connections.go
 - [ ] `Server.MembersAPI()`: true only when `s.SSO().Enabled()`, and the website origin is set. Reloaded in `reloadSSO` like the client
 
 ### 4. Check a token with User Management (`internal/sso`)
-- [ ] `sso.Client.CheckToken(ctx, token) (*TokenUser, via string, err)`: `GET {internal or public URL}/api/v1/token` using the existing `c.do` with the client's Basic auth (SSO client id and secret) and header `X-Token: umd_…`. Parse `{"user":{sub,username,name,email,role},"via":"website"}`
-- [ ] Typed errors: `ErrTokenRefused` for 401 (expired, revoked, wrong audience), anything else (timeout, 5xx, bad JSON, connection refused) is "unavailable"
-- [ ] Tiny cache in `internal/server` (map + mutex, keyed by a SHA-256 of the token, never the raw token): a good answer lives up to 60 s and never longer; refusals are not cached; entries pruned on lookup; at most a few thousand entries. Reuse the `grantChecks` single-flight idea from `sso.go` so a burst of calls makes one check
-- [ ] Unit tests in `internal/sso/sso_test.go` with `httptest`: headers sent (Basic, `X-Token`), 200 parsed, 401 gives `ErrTokenRefused`, 500 and closed server give "unavailable"
+- [x] `sso.Client.CheckToken(ctx, token) (*TokenUser, via string, err)`: `GET {internal or public URL}/api/v1/token` using the existing `c.do` with the client's Basic auth (SSO client id and secret) and header `X-Token: umd_…`. Parse `{"user":{sub,username,name,email,role},"via":"website"}` (Built as `internal/umtoken.Verifier.Check` instead, standard library only so other apps can copy it; same call and headers.)
+- [x] Typed errors: `ErrTokenRefused` for 401 (expired, revoked, wrong audience), anything else (timeout, 5xx, bad JSON, connection refused) is "unavailable" (`umtoken.ErrRefused`, `umtoken.ErrUnavailable`; `invalid_client` counts as unavailable.)
+- [x] Tiny cache in `internal/server` (map + mutex, keyed by a SHA-256 of the token, never the raw token): a good answer lives up to 60 s and never longer; refusals are not cached; entries pruned on lookup; at most a few thousand entries. Reuse the `grantChecks` single-flight idea from `sso.go` so a burst of calls makes one check (In `internal/umtoken`, keyed by SHA-256 of UM address + client ID + token, with single-flight.)
+- [x] Unit tests in `internal/sso/sso_test.go` with `httptest`: headers sent (Basic, `X-Token`), 200 parsed, 401 gives `ErrTokenRefused`, 500 and closed server give "unavailable" (In `internal/umtoken/umtoken_test.go`.)
 
 ### 5. The `/api/v1/me/…` gate
 - [ ] New file `internal/server/api_me.go` with `meRoutes(mux)`, called from `apiRoutes`. Routes are registered **without** `apiHandler` (which sets `Access-Control-Allow-Origin: *`) and use a `meHandler` wrapper instead; the more specific `/api/v1/me/` pattern wins over the `/api/` catch-alls
 - [ ] `meHandler`: (a) 404 when `!s.MembersAPI()`; (b) CORS: if `Origin` equals the configured website origin exactly, set `Access-Control-Allow-Origin: <that origin>`, `Vary: Origin`, methods `GET, POST, PUT, DELETE, OPTIONS`, headers `Authorization, Content-Type, Idempotency-Key`, `Max-Age: 600`; any other origin gets no CORS headers and its preflight gets 403; never `*`, never `Allow-Credentials`; (c) `Cache-Control: private, no-store`; (d) never sets a cookie
-- [ ] Token step: require `Authorization: Bearer umd_…`; a `cal_` token or no header gets 401 with `WWW-Authenticate`. Call the cached `CheckToken`. `ErrTokenRefused` gives 401; unavailable gives **503** with `Retry-After: 5`, and nothing is accepted from an old cache entry past 60 s; `via` other than `website` gives 403
-- [ ] Local user: `s.store.UpsertSSOUser(u.Sub, u.Username, u.Name, store.RoleFromSSO(u.Role))`, exactly what `checkGrant` and the SSO callback do (`sso.go`, `store/sso_users.go`). An inactive local user gets 403. The user goes in the request context (new `meUser(r)`), not the `loadSession` path; add `/api/v1/me/` to `isCookieFree` (it already matches `/api/`) and test no `Set-Cookie`
-- [ ] Roles: any role may use `/me` (a scheduler or admin is still a member there); it never grants the scheduler or admin actions, which stay in the server-rendered back office
+- [x] Token step: require `Authorization: Bearer umd_…`; a `cal_` token or no header gets 401 with `WWW-Authenticate`. Call the cached `CheckToken`. `ErrTokenRefused` gives 401; unavailable gives **503** with `Retry-After: 5`, and nothing is accepted from an old cache entry past 60 s; `via` other than `website` gives 403 (`via` allowed: `mcp`, `website`.)
+- [x] Local user: `s.store.UpsertSSOUser(u.Sub, u.Username, u.Name, store.RoleFromSSO(u.Role))`, exactly what `checkGrant` and the SSO callback do (`sso.go`, `store/sso_users.go`). An inactive local user gets 403. The user goes in the request context (new `meUser(r)`), not the `loadSession` path; add `/api/v1/me/` to `isCookieFree` (it already matches `/api/`) and test no `Set-Cookie` (`meUser(r)`; the role follows each token answer.)
+- [x] Roles: any role may use `/me` (a scheduler or admin is still a member there); it never grants the scheduler or admin actions, which stay in the server-rendered back office
 - [ ] Errors use `apiError` and the same JSON shape as the rest of the API; request bodies limited with `http.MaxBytesReader` (64 KB), JSON decoded with `DisallowUnknownFields`
 
 ### 6. Read endpoints
-- [ ] `GET /api/v1/me/calendar?from=&to=&room=`: `s.calendarFor(r, from, to, store.AccessPrivate)` (via `store.AccessFor(user)`): public and private in full, locked as busy blocks only. Same `apiEventJSON` shape and `apiRange` limits. **No equipment** in this list (see Questions)
-- [ ] `GET /api/v1/me/calendar/{id}`: `s.store.CalendarBooking(id, access)`; 404 for a booking not shown in full, as `apiEvent` does
-- [ ] `GET /api/v1/me/rooms`: bookable rooms grouped under their building, from `s.bookableRooms()` and `groupRooms` in `handlers_requests.go` (the same list `/request` shows; a bookable building with no bookable rooms is one loose choice)
-- [ ] `GET /api/v1/me/availability?rooms=&starts_on=&…`: reuse the logic of `handleRequestAvailability` (split the core into `s.availability(r.URL.Query()) availability` and have both handlers call it). Busy blocks only, never titles
-- [ ] `GET /api/v1/me/bookings`: the caller's requests and bookings, upcoming first with status, from `s.store.RequestsBy(user.ID)`, using the grouping in `handleMyBookings` (`handlers_my.go`; extract the list-building into `s.myBookings(user)` shared by the page and the API). Phones and other people's data never appear
+- [x] `GET /api/v1/me/calendar?from=&to=&room=`: `s.calendarFor(r, from, to, store.AccessPrivate)` (via `store.AccessFor(user)`): public and private in full, locked as busy blocks only. Same `apiEventJSON` shape and `apiRange` limits. **No equipment** in this list (see Questions) (For the MCP server; capped at 100, `?limit=`.)
+- [x] `GET /api/v1/me/calendar/{id}`: `s.store.CalendarBooking(id, access)`; 404 for a booking not shown in full, as `apiEvent` does (For the MCP server.)
+- [x] `GET /api/v1/me/rooms`: bookable rooms grouped under their building, from `s.bookableRooms()` and `groupRooms` in `handlers_requests.go` (the same list `/request` shows; a bookable building with no bookable rooms is one loose choice) (For the MCP server, contract shape `{"buildings":[{name, rooms:[{name, capacity}]}]}`; a building bookable whole as well as by room lists itself first with `whole: true`.)
+- [x] `GET /api/v1/me/availability?rooms=&starts_on=&…`: reuse the logic of `handleRequestAvailability` (split the core into `s.availability(r.URL.Query()) availability` and have both handlers call it). Busy blocks only, never titles (For the MCP server with the contract's `from`, `to`, `rooms` (names); busy blocks from `BusyInRoomsNamed`, so the request form's handler was not split.)
+- [x] `GET /api/v1/me/bookings`: the caller's requests and bookings, upcoming first with status, from `s.store.RequestsBy(user.ID)`, using the grouping in `handleMyBookings` (`handlers_my.go`; extract the list-building into `s.myBookings(user)` shared by the page and the API). Phones and other people's data never appear (For the MCP server: requests (`type: request`, request ID) and hand-added bookings (`type: booking`, booking ID), list built in `api_me.go` mirroring `handleMyBookings` rather than extracted.)
 - [ ] `GET /api/v1/me/bookings/{id}`: one of the caller's own (403/404 for anyone else's, like `myRequest`); includes `can_change` from `canChange`/`takenOver`, and a `taken_over` flag with a link to the event when a planner took it
 - [ ] Equipment on these reads: `GET /api/v1/me/equipment?rooms=` lists what is offered with the chosen rooms (`store.OfferedWith`) with what is left at those times (`EquipmentAskedFor` as in the availability handler). Own bookings carry their own lines (`RequestEquipment`, `BookingEquipment`), shortage flag included. Equipment is only here because members can ask for it on `/request` today; nobody else's equipment is ever shown
 

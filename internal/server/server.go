@@ -27,6 +27,7 @@ import (
 	"github.com/tylergoza/church-calendar/internal/connections"
 	"github.com/tylergoza/church-calendar/internal/sso"
 	"github.com/tylergoza/church-calendar/internal/store"
+	"github.com/tylergoza/church-calendar/internal/umtoken"
 	"github.com/tylergoza/church-calendar/web"
 )
 
@@ -70,6 +71,8 @@ type Server struct {
 	ssoBroken  atomic.Value
 	ssoBaseURL atomic.Value
 	grants     *grantChecks
+	// meTokens checks the User Management tokens sent to /api/v1/me/….
+	meTokens *umtoken.Verifier
 
 	limiter *loginLimiter
 	// requestLimiter counts room requests sent by visitors, per IP.
@@ -85,7 +88,7 @@ func New(cfg Config, st *store.Store, logger *slog.Logger) (*Server, error) {
 		cfg.Env = os.Getenv
 	}
 	s := &Server{cfg: cfg, store: st, log: logger, limiter: newLoginLimiter(10, 15*time.Minute),
-		requestLimiter: newLoginLimiter(5, time.Hour), grants: newGrantChecks()}
+		requestLimiter: newLoginLimiter(5, time.Hour), grants: newGrantChecks(), meTokens: umtoken.New()}
 	s.ssoBroken.Store("")
 	s.ssoBaseURL.Store("")
 	if cfg.Dev {
